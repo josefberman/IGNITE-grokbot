@@ -34,7 +34,7 @@ pip install -e ".[dev,torch]"
 
 ### Conda
 
-`environment.yml` installs compiled packages (Python ≥ 3.10, RDKit, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) from conda-forge, then installs this project in editable mode with the `dev` extras so tests can run. PyTorch is included in the conda file for a full local install; omit it from a custom env if you only need the rule-based fallback.
+`environment.yml` lists the same third-party packages as `pyproject.toml`. Compiled packages (Python ≥ 3.10, RDKit, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) come from conda-forge; the rest (including optional extras) are installed via pip, plus this project in editable mode with the `dev` extras so tests can run. PyTorch is included for a full local install; omit it from a custom env if you only need the rule-based fallback.
 
 ```bash
 conda env create -f environment.yml
