@@ -45,6 +45,8 @@ dependencies:
       - pubchempy>=1.0.4,<2
       - transformers>=4.36.0,<5
       - sentence-transformers>=2.2.0,<4
-      # extra: sascore (lazy import in backend/app/services/safety.py)
-      - BRSAScore>=0.1.1,<1
+      # extra: sascore — BRSAScore>=0.1.1,<1 (lazy import in
+      # backend/app/services/safety.py). Not installed by default: the
+      # published wheel depends on rdkit-pypi, which conflicts with
+      # conda-forge rdkit. Use a pip-only env: pip install -e ".[sascore]"
       - -e ".[dev]"
