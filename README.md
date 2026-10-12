@@ -21,10 +21,27 @@ Also: [docs/architecture/TRACEABILITY.md](docs/architecture/TRACEABILITY.md) and
 
 Run commands from the repository root, with the project environment active.
 
+### pip / venv
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
+
+### Conda
+
+`environment.yml` installs compiled packages (Python ≥ 3.10, RDKit, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) from conda-forge, then installs this project in editable mode with the `dev` extras so tests can run.
+
+```bash
+conda env create -f environment.yml
+conda activate ignite
+```
+
+```bash
+pytest tests/unit tests/integration
+```
+
+Equivalent with micromamba: `micromamba env create -f environment.yml` then `micromamba activate ignite`.
 
 There is no separate `predict` command. Property estimates come from the XGBoost models in `models/` (density, detonation velocity, detonation pressure, solid heat of formation). Pair generation uses them to label parent→child deltas. The GUI search uses them, plus optional literature values, to score candidates.
 
