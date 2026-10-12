@@ -116,7 +116,15 @@ class LearnedPlannerBundle:
         if self.checkpoint_dir and (self.checkpoint_dir / "planner.pt").exists():
             try:
                 import torch
-
+            except ImportError as e:
+                logger.warning(
+                    "Learned planner checkpoint found at %s but torch is not installed; "
+                    "using rule-based fallback (%s). Install with: pip install -e '.[torch]'",
+                    self.checkpoint_dir,
+                    e,
+                )
+                return
+            try:
                 from ml.models.architectures import (
                     DEFAULT_DROPOUT,
                     DEFAULT_HEADS,

@@ -23,14 +23,18 @@ Run commands from the repository root, with the project environment active.
 
 ### pip / venv
 
+`pyproject.toml` is the source of truth for Python dependencies. Torch is an optional extra: search still runs with the rule-based SMARTS planner when torch or `ml/checkpoints/planner.pt` is missing.
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
+# optional, for the learned modification planner:
+pip install -e ".[dev,torch]"
 ```
 
 ### Conda
 
-`environment.yml` installs compiled packages (Python ≥ 3.10, RDKit, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) from conda-forge, then installs this project in editable mode with the `dev` extras so tests can run.
+`environment.yml` installs compiled packages (Python ≥ 3.10, RDKit, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) from conda-forge, then installs this project in editable mode with the `dev` extras so tests can run. PyTorch is included in the conda file for a full local install; omit it from a custom env if you only need the rule-based fallback.
 
 ```bash
 conda env create -f environment.yml
