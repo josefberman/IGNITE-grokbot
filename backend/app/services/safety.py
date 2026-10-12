@@ -34,11 +34,6 @@ def _normalize_sascore(x: float) -> float:
 
 def calculate_sascore(smiles: str) -> float:
     try:
-        from rdkit.Chem import RDConfig
-        import os
-        import sys
-
-        sys.path.append(os.path.join(RDConfig.RDContribDir, "SA_Score"))
         from BRSAScore import SAScorer  # type: ignore
 
         score, _ = SAScorer().calculateScore(smiles)

@@ -27,14 +27,14 @@ Run commands from the repository root, with the project environment active.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,sascore]"
 # optional, for the learned modification planner:
-pip install -e ".[dev,torch]"
+pip install -e ".[dev,sascore,torch]"
 ```
 
 ### Conda
 
-`environment.yml` lists the same third-party packages as `pyproject.toml`. Compiled packages (Python ≥ 3.10, RDKit, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) come from conda-forge; the rest (including optional extras) are installed via pip, plus this project in editable mode with the `dev` extras so tests can run. PyTorch is included for a full local install; omit it from a custom env if you only need the rule-based fallback.
+`environment.yml` lists the same third-party packages as `pyproject.toml`. Compiled packages (Python 3.10–3.11, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) come from conda-forge. RDKit is installed as **rdkit-pypi** via pip (not conda-forge) so the `sascore` extra (`BRSAScore`) can install; Python is pinned below 3.12 because rdkit-pypi has no 3.12 wheels. Remaining packages and this project (`pip install -e ".[dev,sascore]"`) also come from pip. PyTorch is included for a full local install; omit it from a custom env if you only need the rule-based fallback.
 
 ```bash
 conda env create -f environment.yml

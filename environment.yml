@@ -1,30 +1,31 @@
 # Conda environment for running IGNITE locally.
 # Every third-party distribution declared in pyproject.toml is listed here too.
-# Heavy / compiled packages come from conda-forge. Remaining packages (and this
-# project in editable mode with the dev extras) are installed via pip.
+# Heavy / compiled packages come from conda-forge except RDKit: BRSAScore
+# requires the pip name rdkit-pypi, so RDKit and BRSAScore are installed via pip.
+# Create from the repo root. Python is <3.12 because rdkit-pypi has no 3.12 wheels.
 #
 # pytorch/torch is optional at runtime: the API falls back to the rule-based
 # planner when torch or the checkpoint is missing. It is included here so a
-# full local install can run the learned planner. Create from the repo root.
+# full local install can run the learned planner.
 name: ignite
 channels:
   - conda-forge
   - nodefaults
 dependencies:
-  - python>=3.10,<3.13
+  - python>=3.10,<3.12
   - pip
   # compiled / numeric (core) — same pins as pyproject.toml
   - numpy>=1.26.0,<3
   - scipy>=1.10.0,<2
   - pandas>=2.0.0,<3
   - joblib>=1.3.0,<2
-  - rdkit>=2023.9.1,<2027
   - xgboost>=2.0.0,<4
   - scikit-learn>=1.3.0,<2
   - pytorch>=2.1.0,<3  # pip distribution name: torch (extra: torch)
   - pillow>=10.0.0,<12
   - pip:
-      # core (pure-Python / wheels; same pins as pyproject.toml)
+      # core: rdkit-pypi provides import rdkit (required by BRSAScore)
+      - rdkit-pypi>=2022.9.5,<2024
       - fastapi>=0.110.0,<1
       - uvicorn[standard]>=0.27.0,<1
       - pydantic>=2.6.0,<3
@@ -45,8 +46,6 @@ dependencies:
       - pubchempy>=1.0.4,<2
       - transformers>=4.36.0,<5
       - sentence-transformers>=2.2.0,<4
-      # extra: sascore — BRSAScore>=0.1.1,<1 (lazy import in
-      # backend/app/services/safety.py). Not installed by default: the
-      # published wheel depends on rdkit-pypi, which conflicts with
-      # conda-forge rdkit. Use a pip-only env: pip install -e ".[sascore]"
-      - -e ".[dev]"
+      # extra: sascore
+      - BRSAScore>=0.1.1,<1
+      - -e ".[dev,sascore]"
