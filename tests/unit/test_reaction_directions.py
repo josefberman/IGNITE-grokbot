@@ -32,12 +32,13 @@ _ON_TARGET = {
 def _parse_doc_directions() -> dict[str, tuple[int, int, int, int]]:
     text = DOCS.read_text(encoding="utf-8")
     row_re = re.compile(
-        r"^\| `([a-zA-Z0-9_]+)` \| .+ \| ([+\-0-9,\s]+) \|\s*$",
+        r"^\| `([a-zA-Z0-9_]+)` \| .+ \| ([+\-−0-9,\s]+) \|\s*$",
         re.MULTILINE,
     )
     out: dict[str, tuple[int, int, int, int]] = {}
     for reagent, raw in row_re.findall(text):
-        parts = [int(p.strip()) for p in raw.split(",")]
+        normalized = raw.replace("−", "-")
+        parts = [int(p.strip()) for p in normalized.split(",")]
         assert len(parts) == 4, (reagent, raw)
         out[reagent] = tuple(parts)  # type: ignore[assignment]
     return out
