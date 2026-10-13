@@ -1,4 +1,4 @@
-"""Modification planner: learned graph MP heads with rule-based fallback."""
+"""Modification planner: learned graph MP heads or documented rule-based modifier."""
 
 from __future__ import annotations
 
@@ -10,8 +10,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from backend.app.domain.models import ModificationRecord, PROPERTY_KEYS
+from backend.app.domain.models import ModificationMode, ModificationRecord, PROPERTY_KEYS
 from backend.app.services.chemistry import edit_distance_proxy, validate_molecule
+from backend.app.services.reaction_directions import rank_reagents_for_gap
 from backend.app.services.reaction_primitives import (
     StrategyPoolModifier,
     list_planner_vocab,
@@ -19,23 +20,15 @@ from backend.app.services.reaction_primitives import (
     list_reagents,
     matching_group_ids,
     matching_reaction_ids,
-    planner_labels,
     reagent_id_for_smarts,
 )
 from ml.planner_gap import planner_input_from_parent_target
 
 logger = logging.getLogger(__name__)
 
-_GAP_DISPLAY = {
-    "density": "Density",
-    "det_velocity": "Det Velocity",
-    "det_pressure": "Det Pressure",
-    "hf_solid": "Hf solid",
-}
 
-
-def _gap_display(parent_props: Dict[str, float], targets: Dict[str, float]) -> Dict[str, float]:
-    return {_GAP_DISPLAY[k]: targets[k] - parent_props.get(k, targets[k]) for k in PROPERTY_KEYS}
+class PlannerUnavailableError(RuntimeError):
+    """Raised when the learned planner is requested but torch/checkpoint cannot run it."""
 
 
 def _gap_vector(parent_props: Dict[str, float], targets: Dict[str, float]) -> List[float]:
@@ -105,6 +98,7 @@ class LearnedPlannerBundle:
     def __init__(self, checkpoint_dir: Path | str | None = None):
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
         self.available = False
+        self.unavailable_reason = self._missing_checkpoint_reason()
         groups, reagent_rows = list_planner_vocab()
         self.family_names = groups
         self.reagent_names = [r["reagent_id"] for r in reagent_rows]
@@ -113,16 +107,16 @@ class LearnedPlannerBundle:
             f: [r["reagent_id"] for r in reagent_rows if r["family_id"] == f] for f in self.family_names
         }
         self._model = None
-        if self.checkpoint_dir and (self.checkpoint_dir / "planner.pt").exists():
+        ckpt = self.checkpoint_dir / "planner.pt" if self.checkpoint_dir else None
+        if ckpt is not None and ckpt.exists():
             try:
                 import torch
             except ImportError as e:
-                logger.warning(
-                    "Learned planner checkpoint found at %s but torch is not installed; "
-                    "using rule-based fallback (%s). Install with: pip install -e '.[torch]'",
-                    self.checkpoint_dir,
-                    e,
+                self.unavailable_reason = (
+                    "Learned planner is unavailable: torch is not installed. "
+                    "Install with: pip install -e '.[torch]'"
                 )
+                logger.warning("%s (%s)", self.unavailable_reason, e)
                 return
             try:
                 from ml.models.architectures import (
@@ -164,6 +158,7 @@ class LearnedPlannerBundle:
                     if group in self.family_to_reagent_ids:
                         self.family_to_reagent_ids[group].append(rid)
                 self.available = True
+                self.unavailable_reason = ""
                 logger.info(
                     "Loaded learned planner from %s (%d families, %d reagents)",
                     self.checkpoint_dir,
@@ -174,6 +169,18 @@ class LearnedPlannerBundle:
                 logger.warning("Could not load learned planner: %s", e)
                 self.available = False
                 self._model = None
+                self.unavailable_reason = (
+                    f"Learned planner is unavailable: failed to load checkpoint ({e})."
+                )
+
+    def _missing_checkpoint_reason(self) -> str:
+        if not self.checkpoint_dir:
+            return (
+                "Learned planner is unavailable: no checkpoint directory configured "
+                "(IGNITE_LEARNED_CHECKPOINT_DIR)."
+            )
+        ckpt = self.checkpoint_dir / "planner.pt"
+        return f"Learned planner is unavailable: checkpoint not found at {ckpt}."
 
     def _encode(self, parent_smiles: str, gap_vector: Sequence[float]):
         if not self.available or self._model is None:
@@ -302,6 +309,19 @@ class LearnedPlannerBundle:
             )
         return families, sites, per_family
 
+
+def planner_capability(checkpoint_dir: Path | str | None = None) -> dict:
+    """Whether the learned planner can run, with a GUI-safe reason if not."""
+    from backend.app.core.config import get_settings
+
+    path = Path(checkpoint_dir) if checkpoint_dir else get_settings().learned_checkpoint_dir
+    bundle = LearnedPlannerBundle(path)
+    return {
+        "planner_available": bundle.available,
+        "planner_unavailable_reason": bundle.unavailable_reason or None,
+        "rule_based_available": True,
+        "checkpoint_dir": str(path),
+    }
 
 
 class ModificationMechanism:
@@ -444,8 +464,8 @@ class ModificationMechanism:
         *,
         forbidden: Optional[set[str]] = None,
         skip_reagents: Optional[set[str]] = None,
+        mode: ModificationMode = ModificationMode.RULE_BASED,
     ) -> List[Tuple[str, ModificationRecord]]:
-        gap_disp = _gap_display(parent_props, targets)
         gap_vec = _gap_vector(parent_props, targets)
         products: List[Tuple[str, ModificationRecord]] = []
         seen: set[str] = set(forbidden or ())
@@ -453,11 +473,16 @@ class ModificationMechanism:
         # the next call on the same molecule uses the next family and reagent.
         tried = skip_reagents if skip_reagents is not None else set()
         mol = Chem.MolFromSmiles(parent_smiles)
-        rule_target = max(n * 10, n + len(seen))
         family_cap = max(8, n * 3)
 
-        # --- Learned path: family → reagent → site-biased SMARTS ---
-        if self.learned.available and mol is not None:
+        if mode == ModificationMode.PLANNER:
+            if not self.learned.available:
+                raise PlannerUnavailableError(
+                    self.learned.unavailable_reason
+                    or "Learned planner is unavailable: torch or the planner checkpoint is missing."
+                )
+            if mol is None:
+                return products[:n]
             k_fam = max(3, min(8, n * 2))
             families, sites, reag_by_fam = self.learned.plan(
                 parent_smiles,
@@ -498,25 +523,33 @@ class ModificationMechanism:
                     n=n,
                 ):
                     break
+            return products[:n]
 
-        # --- Rule-based strategy pool fallback / fill ---
-        if len(products) < n:
-            strategy = self.rule.get_strategy(gap_disp)
-            specific = strategy.get("primitive", "strategy_pool")
-            if specific in tried:
-                specific = ""
-            else:
-                tried.add(specific)
-            group, _ = planner_labels(specific, specific) if specific else ("", "")
-            smarts = (strategy.get("variants") or [{}])[0].get("smarts")
-            for child in ([] if not specific else self.rule.apply_strategies(
-                parent_smiles, gap_disp, target_count=rule_target
-            )):
+        # Rule-based: rank documented reagents by how they close the property gap.
+        if mol is None:
+            return products[:n]
+        ranked = rank_reagents_for_gap(
+            parent_props,
+            targets,
+            parent_smiles=parent_smiles,
+            skip=tried,
+        )
+        for reaction_id in ranked:
+            if len(products) >= n:
+                break
+            if reaction_id in tried:
+                continue
+            tried.add(reaction_id)
+            prim = self._prims.get(reaction_id)
+            group = prim.get("group", reaction_id) if prim else reaction_id
+            for smi, _variant, smarts in self._apply_family(
+                parent_smiles, mol, reaction_id, max_products=family_cap
+            ):
                 if self._accept(
                     parent_smiles,
-                    child,
+                    smi,
                     family=group,
-                    reagent=specific,
+                    reagent=reaction_id,
                     smarts=smarts,
                     planner="rule_based",
                     seen=seen,
@@ -524,33 +557,4 @@ class ModificationMechanism:
                     n=n,
                 ):
                     break
-
-        # --- Exhaust remaining primitives if still short ---
-        if len(products) < n and mol is not None:
-            prims = list(self._prims.values())
-            self.rng.shuffle(prims)
-            for prim in prims:
-                if len(products) >= n:
-                    break
-                specific = prim["family_id"]
-                if specific in tried:
-                    continue
-                tried.add(specific)
-                group = prim.get("group", specific)
-                for smi, _variant, smarts in self._apply_family(
-                    parent_smiles, mol, specific, max_products=family_cap
-                ):
-                    if self._accept(
-                        parent_smiles,
-                        smi,
-                        family=group,
-                        reagent=specific,
-                        smarts=smarts,
-                        planner="rule_based",
-                        seen=seen,
-                        products=products,
-                        n=n,
-                    ):
-                        if len(products) >= n:
-                            break
         return products[:n]

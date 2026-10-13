@@ -2,7 +2,7 @@
 
 Learned energetic-material generation platform with a web GUI.
 
-Given target energetic properties and beam-search parameters, IGNITE selects MAPE-close seeds, expands candidates via a learned (or rule-based fallback) modification planner, estimates properties with literature/XGBoost sources, ranks by MAPE + SAScore + minimal-edit, and returns the best molecule with an audit trail. An optional novelty gate can hard-reject exact known molecules.
+Given target energetic properties and beam-search parameters, IGNITE selects MAPE-close seeds, expands candidates with either the learned planner or a rule-based modifier (chosen per run in the GUI), estimates properties with literature/XGBoost sources, ranks by MAPE + SAScore + minimal-edit, and returns the best molecule with an audit trail. An optional novelty gate can hard-reject exact known molecules.
 
 **Outputs are computational candidates only — not experimental validation or a legal novelty / patentability opinion.** Safety, uncertainty, and novelty evidence are not reported in the UI.
 
@@ -23,7 +23,7 @@ Run commands from the repository root, with the project environment active.
 
 ### pip / venv
 
-`pyproject.toml` is the source of truth for Python dependencies. Torch is an optional extra: search still runs with the rule-based SMARTS planner when torch or `ml/checkpoints/planner.pt` is missing.
+`pyproject.toml` is the source of truth for Python dependencies. Torch is an optional extra. If you select the learned planner without torch or `ml/checkpoints/planner.pt`, the API returns an error and the GUI shows the reason — it does **not** silently fall back to the rule-based modifier. Choose the rule-based modifier in the GUI when the planner is unavailable.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -34,7 +34,7 @@ pip install -e ".[dev,sascore,torch]"
 
 ### Conda
 
-`environment.yml` lists the same third-party packages as `pyproject.toml`. Compiled packages (Python 3.10–3.11, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) come from conda-forge. RDKit is installed as **rdkit-pypi** via pip (not conda-forge) so the `sascore` extra (`BRSAScore`) can install; Python is pinned below 3.12 because rdkit-pypi has no 3.12 wheels. Remaining packages and this project (`pip install -e ".[dev,sascore]"`) also come from pip. PyTorch is included for a full local install; omit it from a custom env if you only need the rule-based fallback.
+`environment.yml` lists the same third-party packages as `pyproject.toml`. Compiled packages (Python 3.10–3.11, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) come from conda-forge. RDKit is installed as **rdkit-pypi** via pip (not conda-forge) so the `sascore` extra (`BRSAScore`) can install; Python is pinned below 3.12 because rdkit-pypi has no 3.12 wheels. Remaining packages and this project (`pip install -e ".[dev,sascore]"`) also come from pip. PyTorch is included for a full local install; omit it from a custom env if you only need the rule-based modifier.
 
 ```bash
 conda env create -f environment.yml
@@ -62,7 +62,7 @@ train_planner   →  ml/checkpoints/planner.pt
 API (port 8080) + GUI (port 5173)  →  beam search → ranked molecules
 ```
 
-If `ml/checkpoints/planner.pt` is missing or does not match the current architecture, search still runs and fills expansions from the rule-based SMARTS pool.
+If `ml/checkpoints/planner.pt` is missing or does not match the current architecture, select **Rule-based modifier** in the GUI (or `mode: "rule_based"` on the API). Planner mode will refuse to start rather than swap modifiers.
 
 ### 1. Prepare seeds and property models
 
@@ -211,6 +211,15 @@ Open [http://localhost:5173](http://localhost:5173). You do not type a SMILES. T
 | MAPE threshold | 1%          | Target mean absolute percentage error across the four properties (equal weights) | 0–100                                                  |
 
 
+**Modifier** (per run; not swapped automatically):
+
+
+| Mode | GUI default | Effect |
+| ---- | ----------- | ------ |
+| Learned planner | selected when torch and `planner.pt` are available | Graph model proposes family, reagent, and site. If torch or the checkpoint is missing, the GUI explains why and the search does not start. |
+| Rule-based modifier | selected when the planner is unavailable | Ranks reagents from [docs/reaction_families.md](docs/reaction_families.md) by whether their documented direction closes the gap between the seed's predicted properties and the targets. Documented `0` is treated as **neutral**. Family-level mixed signs are **unknown** and are not guessed; ranking uses the specific reagent. |
+
+
 **Toggles:**
 
 
@@ -248,6 +257,11 @@ Optional `.env` variables, prefix `IGNITE_`:
 | `IGNITE_LENS_API_KEY`           | empty                                         | Lens patent API key                     |
 | `IGNITE_REDIS_URL`              | empty                                         | Unused by the current in-process search |
 | `IGNITE_OPENAI_API_KEY`         | empty                                         | Unused by the current search            |
+| `IGNITE_RUN_LOG_DIR`            | `logs`                                        | Directory for per-run JSON search logs  |
+| `IGNITE_RUN_LOGGING_ENABLED`    | `true`                                        | Write a JSON file after each search     |
+
+
+Each completed search writes one JSON file under `IGNITE_RUN_LOG_DIR` (default `logs/`, gitignored). The file includes the UTC timestamp, target properties, modifier mode (`planner` or `rule_based`), seed SMILES, and every accepted candidate with predicted properties, MAPE fit, SAScore / synthesis-ease penalty, edit-distance / change size, and overall rank/score.
 
 
 ## API
@@ -256,8 +270,9 @@ Optional `.env` variables, prefix `IGNITE_`:
 | Method | Path                             | Purpose        |
 | ------ | -------------------------------- | -------------- |
 | GET    | `/api/v1/health`                 | Health         |
+| GET    | `/api/v1/capabilities`           | Planner / modifier availability |
 | GET    | `/api/v1/models`                 | Model metadata |
-| POST   | `/api/v1/search`                 | Start search   |
+| POST   | `/api/v1/search`                 | Start search (`mode`: `planner` or `rule_based`) |
 | GET    | `/api/v1/search/{id}/progress`   | Progress       |
 | GET    | `/api/v1/search/{id}/events`     | SSE progress   |
 | GET    | `/api/v1/search/{id}`            | Result         |

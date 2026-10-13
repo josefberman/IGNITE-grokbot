@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     openalex_enabled: bool = True
     learned_checkpoint_dir: Path = ROOT / "ml" / "checkpoints"
     processed_data_dir: Path = ROOT / "data" / "processed"
+    run_log_dir: Path = ROOT / "logs"
+    run_logging_enabled: bool = True
 
     @property
     def cors_origin_list(self) -> List[str]:

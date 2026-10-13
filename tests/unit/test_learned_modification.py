@@ -8,6 +8,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
+from backend.app.domain.models import ModificationMode
 from backend.app.services.modification import LearnedPlannerBundle, ModificationMechanism
 from backend.app.services.reaction_primitives import list_planner_vocab, list_primitives, list_reagents
 from ml.models.architectures import ModificationPlanner, mol_to_graph
@@ -90,7 +91,7 @@ def test_expand_records_reagent_id(tmp_path: Path):
         "det_pressure": 30.0,
         "hf_solid": 100.0,
     }
-    out = mech.expand(parent, props, targets, n=3)
+    out = mech.expand(parent, props, targets, n=3, mode=ModificationMode.PLANNER)
     assert len(out) >= 1
     for _, rec in out:
         assert rec.reagent

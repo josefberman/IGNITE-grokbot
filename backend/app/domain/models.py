@@ -50,6 +50,13 @@ class JobStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ModificationMode(str, Enum):
+    """Per-run choice of how parents are expanded. Never silently swapped."""
+
+    PLANNER = "planner"
+    RULE_BASED = "rule_based"
+
+
 class TargetProperties(BaseModel):
     density: float = Field(..., description="Target density g/cm^3")
     det_velocity: float = Field(..., description="Target detonation velocity m/s")
@@ -183,6 +190,10 @@ class CandidateMolecule(BaseModel):
 class SearchRequest(BaseModel):
     targets: TargetProperties
     beam: BeamParameters = Field(default_factory=BeamParameters)
+    mode: ModificationMode = Field(
+        ModificationMode.RULE_BASED,
+        description="How to expand seeds: learned planner or documented rule-based modifier.",
+    )
 
 
 class SearchProgress(BaseModel):
@@ -229,6 +240,7 @@ class SearchResult(BaseModel):
     top_k: List[CandidateMolecule] = Field(default_factory=list)
     progress: SearchProgress
     beam_tree: Optional[BeamSearchTree] = None
+    mode: Optional[ModificationMode] = None
     disclaimer: str = (
         "Outputs are computational design candidates only — not experimental validation "
         "or a legal novelty / patentability opinion."

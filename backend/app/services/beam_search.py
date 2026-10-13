@@ -13,12 +13,14 @@ from backend.app.domain.models import (
     BeamTreeNode,
     CandidateMolecule,
     JobStatus,
+    ModificationMode,
     NoveltyStatus,
     SearchProgress,
     TargetProperties,
 )
-from backend.app.services.modification import ModificationMechanism
+from backend.app.services.modification import ModificationMechanism, PlannerUnavailableError
 from backend.app.services.novelty import NoveltyService
+from backend.app.services.run_logger import build_run_log
 from backend.app.services.property_estimator import PropertyEstimator
 from backend.app.services.safety import estimate_safety
 from backend.app.services.scoring import score_candidate
@@ -45,6 +47,10 @@ class BeamSearchController:
         self.novelty = novelty
         self.modification = modification or ModificationMechanism()
         self._stop = False
+        self.last_seed_smiles: List[str] = []
+        self.last_candidates: List[CandidateMolecule] = []
+        self.last_mode: Optional[ModificationMode] = None
+        self.last_run_log: Optional[dict] = None
 
     def request_stop(self) -> None:
         self._stop = True
@@ -97,11 +103,21 @@ class BeamSearchController:
         targets: TargetProperties,
         beam: BeamParameters,
         on_progress: Optional[ProgressCallback] = None,
+        mode: ModificationMode = ModificationMode.RULE_BASED,
     ) -> tuple[CandidateMolecule, List[CandidateMolecule], SearchProgress, BeamSearchTree]:
         self._stop = False
+        self.last_mode = mode
+        self.last_seed_smiles = []
+        self.last_candidates = []
+        self.last_run_log = None
         tree = BeamSearchTree()
         rng = random.Random(beam.random_seed)
         self.modification.rng = rng
+        if mode == ModificationMode.PLANNER and not self.modification.learned.available:
+            raise PlannerUnavailableError(
+                self.modification.learned.unavailable_reason
+                or "Learned planner is unavailable: torch or the planner checkpoint is missing."
+            )
 
         # Honor GUI toggles
         self.estimator.literature.enabled = bool(beam.enable_literature)
@@ -133,6 +149,7 @@ class BeamSearchController:
 
         beam_nodes = sorted(seed_pool, key=lambda c: c.score.total if c.score else 1e9)[:1]
         best = beam_nodes[0]
+        self.last_seed_smiles = [c.canonical_smiles for c in beam_nodes]
         seen = {c.canonical_smiles for c in beam_nodes}
         catalog = {c.canonical_smiles: c for c in beam_nodes}
         tried_reagents: dict[str, set[str]] = {c.canonical_smiles: set() for c in beam_nodes}
@@ -206,7 +223,7 @@ class BeamSearchController:
         progress = emit(
             0,
             JobStatus.RUNNING,
-            f"Seeded with {len(beam_nodes)} molecules (lit={beam.enable_literature})",
+            f"Seeded with {len(beam_nodes)} molecules (mode={mode.value}, lit={beam.enable_literature})",
         )
 
         for iteration in range(1, beam.depth + 1):
@@ -266,6 +283,7 @@ class BeamSearchController:
                     n=beam.width,
                     forbidden=seen,
                     skip_reagents=tried,
+                    mode=mode,
                 )
                 if not expansions and len(tried) == tried_before:
                     exhausted.add(parent.canonical_smiles)
@@ -382,6 +400,15 @@ class BeamSearchController:
         best = top[0] if top else best
         best.score = score_candidate(best, target_dict, explore=False)
         best.mape = best.score.mape
+        self.last_candidates = list(catalog.values())
+        self.last_run_log = build_run_log(
+            job_id=job_id,
+            mode=mode,
+            targets=targets,
+            seed_smiles=self.last_seed_smiles,
+            candidates=self.last_candidates,
+            status=progress.status.value,
+        )
         for c in top:
             c.strip_internal_signals()
         best.strip_internal_signals()

@@ -5,7 +5,14 @@ from __future__ import annotations
 import builtins
 from pathlib import Path
 
-from backend.app.services.modification import LearnedPlannerBundle, ModificationMechanism
+import pytest
+
+from backend.app.domain.models import ModificationMode
+from backend.app.services.modification import (
+    LearnedPlannerBundle,
+    ModificationMechanism,
+    PlannerUnavailableError,
+)
 from backend.app.services.reaction_primitives import list_primitives
 
 _PARENT = "c1ccccc1N(=O)=O"
@@ -27,6 +34,7 @@ def test_learned_bundle_unavailable_without_checkpoint(tmp_path: Path):
     bundle = LearnedPlannerBundle(tmp_path)
     assert bundle.available is False
     assert bundle._model is None
+    assert "checkpoint not found" in bundle.unavailable_reason
 
 
 def test_learned_bundle_unavailable_when_torch_missing(tmp_path: Path, monkeypatch):
@@ -42,15 +50,22 @@ def test_learned_bundle_unavailable_when_torch_missing(tmp_path: Path, monkeypat
     bundle = LearnedPlannerBundle(tmp_path)
     assert bundle.available is False
     assert bundle._model is None
+    assert "torch is not installed" in bundle.unavailable_reason
 
 
-def test_expand_falls_back_without_checkpoint():
+def test_expand_rule_based_without_checkpoint():
     mech = ModificationMechanism(checkpoint_dir=None)
     assert mech.learned.available is False
-    out = mech.expand(_PARENT, _PROPS, _TARGETS, n=3)
+    out = mech.expand(_PARENT, _PROPS, _TARGETS, n=3, mode=ModificationMode.RULE_BASED)
     assert len(out) >= 1
     known = {p["family_id"] for p in list_primitives() if p["family_id"] != "identity"}
     for _, rec in out:
         assert rec.planner == "rule_based"
         assert rec.reagent
         assert rec.reagent in known or rec.reaction_family
+
+
+def test_expand_planner_does_not_fall_back_without_checkpoint():
+    mech = ModificationMechanism(checkpoint_dir=None)
+    with pytest.raises(PlannerUnavailableError, match="checkpoint"):
+        mech.expand(_PARENT, _PROPS, _TARGETS, n=3, mode=ModificationMode.PLANNER)
