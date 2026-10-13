@@ -239,7 +239,8 @@ function ModePicker({
       </label>
       {plannerUnavailable && mode === "planner" ? (
         <p className="notice-message" role="status">
-          {plannerReason} The search will not start and will not fall back to the rule-based modifier.
+          <strong>Cannot start with the learned planner.</strong>
+          {plannerReason} Start search is disabled. The run will not fall back to the rule-based modifier.
         </p>
       ) : plannerUnavailable ? (
         <p className="notice-message" role="status">
@@ -406,6 +407,11 @@ function RunMonitor({
       <div className="run-heading">
         <span className={statusClass(progress.status)}>{progress.status}</span>
         <span className="run-id">Run {progress.job_id.slice(0, 8)}</span>
+        {result?.mode ? (
+          <span className={result.mode === "planner" ? "tag tag--learned" : "tag"}>
+            {result.mode === "planner" ? "Learned planner" : "Rule-based"}
+          </span>
+        ) : null}
       </div>
 
       <div className="iteration-progress">
@@ -550,6 +556,7 @@ export default function App() {
   };
 
   const exportHref = useMemo(() => (jobId ? `/api/v1/search/${jobId}/export.csv` : "#"), [jobId]);
+  const plannerBlocked = mode === "planner" && capabilities != null && !capabilities.planner_available;
 
   return (
     <>
@@ -662,7 +669,13 @@ export default function App() {
           <ScoringReference />
 
           <div className="brief-actions">
-              <button type="button" className="action action--primary" onClick={onStart} disabled={running}>
+              <button
+                type="button"
+                className="action action--primary"
+                onClick={onStart}
+                disabled={running || plannerBlocked}
+                title={plannerBlocked ? (capabilities?.planner_unavailable_reason ?? undefined) : undefined}
+              >
                 {running ? "Searching…" : "Start search"}
               </button>
               <button type="button" className="action action--secondary" onClick={onCancel} disabled={!running}>

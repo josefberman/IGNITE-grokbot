@@ -62,6 +62,26 @@ def test_search_planner_mode_rejected_when_unavailable(monkeypatch):
     assert "torch is not installed" in r.json()["detail"]
 
 
+def test_search_rule_based_mode_is_accepted():
+    r = client.post(
+        "/api/v1/search",
+        json={
+            "targets": {
+                "density": 1.8,
+                "det_velocity": 8500,
+                "det_pressure": 30,
+                "hf_solid": 100,
+            },
+            "beam": {"depth": 1, "width": 1, "top_k": 1, "enable_literature": False, "enable_patent_search": False},
+            "mode": "rule_based",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] in ("queued", "running")
+    assert "job_id" in body
+
+
 def test_search_validation_rejects_out_of_range():
     r = client.post(
         "/api/v1/search",
