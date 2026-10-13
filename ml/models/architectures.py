@@ -43,13 +43,21 @@ def _atom_features(atom: Chem.Atom) -> List[float]:
     feats.extend(1.0 if hyb == h else 0.0 for h in HYBRIDIZATION_LIST)
     feats.append(0.0 if hyb in HYBRIDIZATION_LIST else 1.0)
 
+    # rdkit-pypi 2022.x uses GetExplicitValence/GetImplicitValence;
+    # RDKit 2024+ renamed those to GetValence(ValenceType.*).
+    if hasattr(atom, "GetValence") and hasattr(Chem, "ValenceType"):
+        explicit_v = atom.GetValence(Chem.ValenceType.EXPLICIT)
+        implicit_v = atom.GetValence(Chem.ValenceType.IMPLICIT)
+    else:
+        explicit_v = atom.GetExplicitValence()
+        implicit_v = atom.GetImplicitValence()
     feats.extend(
         [
             float(atom.GetTotalDegree()),
             float(atom.GetFormalCharge()),
             float(atom.GetTotalValence()),
-            float(atom.GetValence(Chem.ValenceType.EXPLICIT)),
-            float(atom.GetValence(Chem.ValenceType.IMPLICIT)),
+            float(explicit_v),
+            float(implicit_v),
             float(atom.GetTotalNumHs()),
             float(atom.GetNumRadicalElectrons()),
             float(atom.GetIsAromatic()),

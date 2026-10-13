@@ -11,6 +11,8 @@ COPY models ./models
 COPY sample_start_molecules.csv ./
 COPY scripts ./scripts
 
+# Runtime deps + test extras. Torch is optional (`pip install -e ".[torch]"`)
+# when a learned planner checkpoint should be loaded; otherwise search falls back.
 RUN pip install --no-cache-dir -e ".[dev]"
 
 RUN mkdir -p /app/data

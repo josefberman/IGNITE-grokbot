@@ -21,10 +21,31 @@ Also: [docs/architecture/TRACEABILITY.md](docs/architecture/TRACEABILITY.md) and
 
 Run commands from the repository root, with the project environment active.
 
+### pip / venv
+
+`pyproject.toml` is the source of truth for Python dependencies. Torch is an optional extra: search still runs with the rule-based SMARTS planner when torch or `ml/checkpoints/planner.pt` is missing.
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,sascore]"
+# optional, for the learned modification planner:
+pip install -e ".[dev,sascore,torch]"
 ```
+
+### Conda
+
+`environment.yml` lists the same third-party packages as `pyproject.toml`. Compiled packages (Python 3.10–3.11, XGBoost, PyTorch, NumPy, SciPy, pandas, scikit-learn, Pillow) come from conda-forge. RDKit is installed as **rdkit-pypi** via pip (not conda-forge) so the `sascore` extra (`BRSAScore`) can install; Python is pinned below 3.12 because rdkit-pypi has no 3.12 wheels. Remaining packages and this project (`pip install -e ".[dev,sascore]"`) also come from pip. PyTorch is included for a full local install; omit it from a custom env if you only need the rule-based fallback.
+
+```bash
+conda env create -f environment.yml
+conda activate ignite
+```
+
+```bash
+pytest tests/unit tests/integration
+```
+
+Equivalent with micromamba: `micromamba env create -f environment.yml` then `micromamba activate ignite`.
 
 There is no separate `predict` command. Property estimates come from the XGBoost models in `models/` (density, detonation velocity, detonation pressure, solid heat of formation). Pair generation uses them to label parent→child deltas. The GUI search uses them, plus optional literature values, to score candidates.
 
