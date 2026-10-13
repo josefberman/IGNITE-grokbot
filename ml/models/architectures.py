@@ -176,7 +176,12 @@ GraphTransformerEncoder = GraphEncoder
 
 
 class ModificationPlanner(nn.Module):
-    """Hierarchical: family → site → reagent (family-conditioned)."""
+    """Hierarchical: family → site → reagent (family-conditioned).
+
+    Layout matches the shipped ``ml/checkpoints/planner.pt`` (IGNITE
+    ``4df03fe``): FiLM on the graph vector, atom attention + fuse, and heads
+    that also see the raw 4-d gap.
+    """
 
     def __init__(
         self,
@@ -192,19 +197,26 @@ class ModificationPlanner(nn.Module):
         self.hidden = hidden
         self.n_families = n_families
         self.n_reagents = n_reagents
+        self.gap_dim = gap_dim
         enc_kw = dict(hidden=hidden, layers=layers, heads=heads, dropout=dropout)
         self.parent_enc = GraphEncoder(**enc_kw)
-        # One FiLM from the 4-d gap. It is the only place the gap enters.
         self.film = nn.Linear(gap_dim, hidden * 2)
-        self.family_head = nn.Linear(hidden, n_families)
+        self.atom_score = nn.Linear(hidden + gap_dim, 1)
+        self.fuse = nn.Sequential(
+            nn.Linear(hidden * 2 + gap_dim, hidden),
+            nn.LayerNorm(hidden),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+        self.family_head = nn.Linear(hidden + gap_dim, n_families)
         self.reagent_head = nn.Sequential(
-            nn.Linear(hidden + n_families, hidden),
+            nn.Linear(hidden + n_families + gap_dim + hidden * 2, hidden),
             nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(hidden, n_reagents),
         )
         self.site_mix = nn.Sequential(
-            nn.Linear(hidden * 2, hidden),
+            nn.Linear(hidden * 2 + hidden + gap_dim, hidden),
             nn.GELU(),
         )
         self.site_head = nn.Linear(hidden, 1)
@@ -215,38 +227,64 @@ class ModificationPlanner(nn.Module):
         delta: torch.Tensor,
         edge_index: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # atom_x: [1, N, F], delta: [1, 4] -> z [1, H], parent_z [1, H], atom_emb [1, N, H]
+        # atom_x: [1, N, F], delta: [1, 4] -> z [1, H], parent_z [1, H], atom_emb [1, N, 2H]
         parent_z, atom_ctx, atom_local = self.parent_enc(atom_x, edge_index, return_atom_emb=True)
         gamma, beta = self.film(delta).chunk(2, dim=-1)
-        z = parent_z * (1.0 + gamma) + beta
-        g = gamma.unsqueeze(1)
-        b = beta.unsqueeze(1)
-        atom_emb = torch.cat([atom_local * (1.0 + g) + b, atom_ctx * (1.0 + g) + b], dim=-1)
+        parent_cond = parent_z * (1.0 + gamma) + beta
+        n_atoms = atom_local.size(1)
+        gap_exp = delta.unsqueeze(1).expand(-1, n_atoms, -1)
+        attn = self.atom_score(torch.cat([atom_local, gap_exp], dim=-1)).squeeze(-1)
+        alpha = torch.softmax(attn, dim=-1)
+        attended = torch.bmm(alpha.unsqueeze(1), atom_local).squeeze(1)
+        z = self.fuse(torch.cat([parent_cond, attended, delta], dim=-1))
+        atom_emb = torch.cat([atom_local, atom_ctx], dim=-1)
         return z, parent_z, atom_emb
 
-    def forward_family(self, z: torch.Tensor) -> torch.Tensor:
-        return self.family_head(z)
+    def _gap(self, z: torch.Tensor, gap: Optional[torch.Tensor]) -> torch.Tensor:
+        if gap is None:
+            return torch.zeros(*z.shape[:-1], self.gap_dim, device=z.device, dtype=z.dtype)
+        return gap
+
+    def forward_family(self, z: torch.Tensor, gap: Optional[torch.Tensor] = None) -> torch.Tensor:
+        return self.family_head(torch.cat([z, self._gap(z, gap)], dim=-1))
 
     def _family_features(
         self,
         z: torch.Tensor,
         family_idx: Optional[torch.Tensor] = None,
+        gap: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if family_idx is not None:
             return F.one_hot(family_idx, self.n_families).to(dtype=z.dtype, device=z.device)
-        return F.softmax(self.forward_family(z), dim=-1)
+        return F.softmax(self.forward_family(z, gap), dim=-1)
 
     def forward_reagent(
         self,
         z: torch.Tensor,
         *,
         family_idx: Optional[torch.Tensor] = None,
+        gap: Optional[torch.Tensor] = None,
+        atom_emb: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        return self.reagent_head(torch.cat([z, self._family_features(z, family_idx)], dim=-1))
+        fam_feat = self._family_features(z, family_idx, gap)
+        gap_t = self._gap(z, gap)
+        if atom_emb is None:
+            local = torch.zeros_like(z)
+        else:
+            local = atom_emb.max(dim=1).values
+        return self.reagent_head(torch.cat([z, fam_feat, gap_t, local], dim=-1))
 
-    def forward_sites(self, atom_emb: torch.Tensor) -> torch.Tensor:
-        # atom_emb: [B, N, 2H] local || context, already FiLM-conditioned
-        logits = self.site_head(self.site_mix(atom_emb)).squeeze(-1)
+    def forward_sites(
+        self,
+        atom_emb: torch.Tensor,
+        z: torch.Tensor,
+        gap: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        n_atoms = atom_emb.size(1)
+        z_exp = z.unsqueeze(1).expand(-1, n_atoms, -1)
+        gap_exp = self._gap(z, gap).unsqueeze(1).expand(-1, n_atoms, -1)
+        mixed = self.site_mix(torch.cat([atom_emb, z_exp, gap_exp], dim=-1))
+        logits = self.site_head(mixed).squeeze(-1)
         if logits.dim() == 2 and logits.size(0) == 1:
             return logits.squeeze(0)
         return logits

@@ -332,14 +332,14 @@ def train(
                 fam_t = torch.tensor([fam])
                 z, _, atom_emb = planner.encode(px_b, gap_b, p_edge)
                 fam_logits = _mask_class_logits(
-                    planner.forward_family(z),
+                    planner.forward_family(z, gap_b),
                     _allowed_families(parent_smi, fam),
                 )
                 reag_logits = _mask_reagent_logits(
-                    planner.forward_reagent(z, family_idx=fam_t),
+                    planner.forward_reagent(z, family_idx=fam_t, gap=gap_b, atom_emb=atom_emb),
                     _allowed_reagents(parent_smi, fam, reag),
                 )
-                site_logits = planner.forward_sites(atom_emb)
+                site_logits = planner.forward_sites(atom_emb, z, gap_b)
                 # Applicability masks use -1e9; label smoothing would assign
                 # mass to those classes and blow up the loss.
                 loss_fam = F.cross_entropy(fam_logits, fam_t, weight=fam_weights)
@@ -399,9 +399,9 @@ def train(
                     fam_t = torch.tensor([fam])
                     allowed_fam = _allowed_families(parent_smi, fam)
                     z, _, atom_emb = planner.encode(px_b, gap_b, p_edge)
-                    fam_logits = planner.forward_family(z)
+                    fam_logits = planner.forward_family(z, gap_b)
                     fam_logits_m = _mask_class_logits(fam_logits, allowed_fam)
-                    site_logits = planner.forward_sites(atom_emb)
+                    site_logits = planner.forward_sites(atom_emb, z, gap_b)
 
                     def reag_logits_fn(family_idx: torch.Tensor) -> torch.Tensor:
                         idx = int(family_idx.item())
@@ -410,7 +410,9 @@ def train(
                         gold = reag if idx == fam else None
                         pooled = _allowed_reagents(parent_smi, idx, gold)
                         return _mask_reagent_logits(
-                            planner.forward_reagent(z, family_idx=family_idx),
+                            planner.forward_reagent(
+                                z, family_idx=family_idx, gap=gap_b, atom_emb=atom_emb
+                            ),
                             pooled,
                         )
 

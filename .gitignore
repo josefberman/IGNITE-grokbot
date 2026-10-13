@@ -6,16 +6,16 @@ venv/
 .env
 node_modules/
 frontend/dist/
-data/processed/
-data/indexes/
+# Runtime job store (copied snapshot is not committed; GUI runs rewrite it).
 data/ignite.db
 output/
 *.sqlite
 .pytest_cache/
 .mypy_cache/
 .DS_Store
-ml/checkpoints/
+# Ignore ad-hoc PyTorch dumps, but keep the shipped planner checkpoint.
 *.pt
+!ml/checkpoints/*.pt
 *.ckpt
 frontend/node_modules/
 logs/
