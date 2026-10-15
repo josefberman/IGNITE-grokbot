@@ -104,6 +104,7 @@ export function BeamTreeView({ tree }: { tree: BeamSearchTree }) {
     [tree.best_id, byId],
   );
   const selected = selectedId ? byId.get(selectedId) : undefined;
+  const usesLearned = tree.nodes.some((n) => n.planner === "learned");
 
   const maxGen = layout.reduce((m, n) => Math.max(m, n.generation), 0);
   const maxY = layout.reduce((m, n) => Math.max(m, n.y + NODE_H / 2), 0);
@@ -123,7 +124,7 @@ export function BeamTreeView({ tree }: { tree: BeamSearchTree }) {
         <span className="beam-legend-item beam-legend-best">Best path</span>
         <span className="beam-legend-item beam-legend-beam">In beam</span>
         <span className="beam-legend-item beam-legend-pruned">Expanded / pruned</span>
-        <span className="beam-legend-item beam-legend-learned">Learned planner</span>
+        {usesLearned ? <span className="beam-legend-item beam-legend-learned">Learned planner</span> : null}
         <span className="beam-legend-item beam-legend-rule">Rule-based</span>
       </div>
       <div className="beam-tree-scroll beam-tree-scroll-h">

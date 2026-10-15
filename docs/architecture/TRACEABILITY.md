@@ -26,7 +26,7 @@ Maps every architecture-diagram box to an owned IGNITE module.
 |-------------|--------|
 | Parent Molecule Encoder | [`ml/models/architectures.py`](../../ml/models/architectures.py) `GraphEncoder` (bond MP + mean pool) |
 | Target gap injection | FiLM on the global vector and on the local and context atom embeddings |
-| Reaction Family / Site / Reagent selectors | `ModificationPlanner`, or rule-based ranking in [`reaction_directions.py`](../../backend/app/services/reaction_directions.py) (explicit per-run mode; no silent fallback) |
+| Reaction Family / Site / Reagent selectors | `ModificationPlanner`, or the reagent-only rule-based modifier in [`reagents.py`](../../backend/app/services/reagents.py) (see [reagents.md](../reagents.md)) (explicit per-run mode; no silent fallback) |
 | Reaction Executor | RDKit SMARTS in `reaction_primitives.py` / `modification.py` |
 | Chemical Validity Filter | [`chemistry.py`](../../backend/app/services/chemistry.py) `validate_molecule` |
 | Property delta | XGBoost absolute models: child prediction minus parent prediction |
