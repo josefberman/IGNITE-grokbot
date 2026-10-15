@@ -62,7 +62,7 @@ train_planner   →  ml/checkpoints/planner.pt
 API (port 8080) + GUI (port 5173)  →  beam search → ranked molecules
 ```
 
-If `ml/checkpoints/planner.pt` is missing or does not match the current architecture, select **Rule-based modifier** in the GUI (or `mode: "rule_based"` on the API). Planner mode will refuse to start rather than swap modifiers.
+`data/processed/` (pair labels, canonical seeds) and `ml/checkpoints/planner.pt` are shipped in the repo, copied from [josefberman/IGNITE](https://github.com/josefberman/IGNITE) commit `4df03fe`. If `planner.pt` is missing or does not match the current architecture, select **Rule-based modifier** in the GUI (or `mode: "rule_based"` on the API). Planner mode will refuse to start rather than swap modifiers.
 
 ### 1. Prepare seeds and property models
 

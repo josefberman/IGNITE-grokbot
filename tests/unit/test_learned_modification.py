@@ -67,7 +67,7 @@ def test_site_loss_trains_site_head():
     opt = torch.optim.Adam(planner.parameters(), lr=1e-2)
     before = planner.site_head.weight.detach().clone()
     z, _, atom_emb = planner.encode(x.unsqueeze(0), torch.zeros(1, 4), edge)
-    logits = planner.forward_sites(atom_emb)
+    logits = planner.forward_sites(atom_emb, z, torch.zeros(1, 4))
     loss = _site_loss(logits, target)
     loss.backward()
     opt.step()

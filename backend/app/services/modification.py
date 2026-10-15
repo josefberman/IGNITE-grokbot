@@ -212,14 +212,15 @@ class LearnedPlannerBundle:
         import torch
 
         with torch.no_grad():
-            logits = self._model.forward_family(z).squeeze(0).clone()
+            gap_t = torch.tensor([list(gap_vector)], dtype=torch.float32)
+            logits = self._model.forward_family(z, gap_t).squeeze(0).clone()
             applicable = set(matching_group_ids(parent_smiles))
             if applicable:
                 for i, name in enumerate(self.family_names):
                     if name not in applicable:
                         logits[i] = -1e9
                 if not bool((logits > -1e8).any()):
-                    logits = self._model.forward_family(z).squeeze(0)
+                    logits = self._model.forward_family(z, gap_t).squeeze(0)
             k_eff = max(1, min(k, int((logits > -1e8).sum().item()), len(self.family_names)))
             if k_eff <= 0:
                 return []
@@ -248,7 +249,10 @@ class LearnedPlannerBundle:
             fam_idx = torch.tensor([self.family_names.index(family_id)])
 
         with torch.no_grad():
-            logits = self._model.forward_reagent(z, family_idx=fam_idx).squeeze(0).clone()
+            gap_t = torch.tensor([list(gap_vector)], dtype=torch.float32)
+            logits = self._model.forward_reagent(
+                z, family_idx=fam_idx, gap=gap_t, atom_emb=atom_emb
+            ).squeeze(0).clone()
             matched = set(matching_reaction_ids(parent_smiles))
             if family_id:
                 allowed = set(self.family_to_reagent_ids.get(family_id, []))
@@ -256,7 +260,9 @@ class LearnedPlannerBundle:
                     if rid not in allowed or (matched and rid not in matched):
                         logits[i] = -1e9
                 if matched and not bool((logits > -1e8).any()):
-                    logits = self._model.forward_reagent(z, family_idx=fam_idx).squeeze(0).clone()
+                    logits = self._model.forward_reagent(
+                        z, family_idx=fam_idx, gap=gap_t, atom_emb=atom_emb
+                    ).squeeze(0).clone()
                     for i, rid in enumerate(self.reagent_names):
                         if rid not in allowed:
                             logits[i] = -1e9
@@ -281,7 +287,8 @@ class LearnedPlannerBundle:
         import torch
 
         with torch.no_grad():
-            scores = self._model.forward_sites(atom_emb)
+            gap_t = torch.tensor([list(gap_vector)], dtype=torch.float32)
+            scores = self._model.forward_sites(atom_emb, z, gap_t)
             m = max(1, min(top_m, scores.numel()))
             return torch.topk(scores, k=m).indices.tolist()
 
