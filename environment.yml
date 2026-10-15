@@ -4,9 +4,9 @@
 # requires the pip name rdkit-pypi, so RDKit and BRSAScore are installed via pip.
 # Create from the repo root. Python is <3.12 because rdkit-pypi has no 3.12 wheels.
 #
-# pytorch/torch is optional at runtime: the API falls back to the rule-based
-# planner when torch or the checkpoint is missing. It is included here so a
-# full local install can run the learned planner.
+# pytorch/torch is optional at runtime. The learned planner requires it plus
+# ml/checkpoints/planner.pt; otherwise choose the rule-based modifier.
+# It is included here so a full local install can run the learned planner.
 name: ignite
 channels:
   - conda-forge

@@ -1,6 +1,17 @@
-import type { BeamParameters, SearchProgress, SearchResult, TargetProperties } from "../types";
+import type {
+  BeamParameters,
+  Capabilities,
+  ModificationMode,
+  SearchProgress,
+  SearchResult,
+  TargetProperties,
+} from "../types";
 
-export type SearchRequest = { targets: TargetProperties; beam: BeamParameters };
+export type SearchRequest = {
+  targets: TargetProperties;
+  beam: BeamParameters;
+  mode: ModificationMode;
+};
 
 const BASE = "";
 
@@ -22,6 +33,12 @@ async function raiseForBadResponse(r: Response): Promise<never> {
     );
   }
   throw new Error(`${r.status}: ${detail || r.statusText}`);
+}
+
+export async function getCapabilities(): Promise<Capabilities> {
+  const r = await fetch(`${BASE}/api/v1/capabilities`);
+  if (!r.ok) await raiseForBadResponse(r);
+  return r.json();
 }
 
 export async function createSearch(req: SearchRequest): Promise<SearchProgress> {

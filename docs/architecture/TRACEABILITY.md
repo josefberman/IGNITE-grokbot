@@ -18,6 +18,7 @@ Maps every architecture-diagram box to an owned IGNITE module.
 | Novelty / patents (SMILES, IUPAC, commercial name) | [`novelty.py`](../../backend/app/services/novelty.py), [`molecule_identity.py`](../../backend/app/services/molecule_identity.py) |
 | 2D structure depiction | [`structure.py`](../../backend/app/services/structure.py) + `GET /api/v1/molecule/depict` |
 | Top Scored Molecule | API `SearchResult.best` + GUI |
+| Search run log | [`run_logger.py`](../../backend/app/services/run_logger.py) (`IGNITE_RUN_LOG_DIR`) |
 
 ## Modification architecture
 
@@ -25,7 +26,7 @@ Maps every architecture-diagram box to an owned IGNITE module.
 |-------------|--------|
 | Parent Molecule Encoder | [`ml/models/architectures.py`](../../ml/models/architectures.py) `GraphEncoder` (bond MP + mean pool) |
 | Target gap injection | FiLM on the global vector and on the local and context atom embeddings |
-| Reaction Family / Site / Reagent selectors | `ModificationPlanner` (+ rule fallback in `ModificationMechanism`) |
+| Reaction Family / Site / Reagent selectors | `ModificationPlanner`, or rule-based ranking in [`reaction_directions.py`](../../backend/app/services/reaction_directions.py) (explicit per-run mode; no silent fallback) |
 | Reaction Executor | RDKit SMARTS in `reaction_primitives.py` / `modification.py` |
 | Chemical Validity Filter | [`chemistry.py`](../../backend/app/services/chemistry.py) `validate_molecule` |
 | Property delta | XGBoost absolute models: child prediction minus parent prediction |

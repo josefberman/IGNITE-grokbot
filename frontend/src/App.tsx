@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { cancelSearch, createSearch, getProgress, getResult } from "./api/client";
+import { cancelSearch, createSearch, getCapabilities, getProgress, getResult } from "./api/client";
 import { BeamTreeView } from "./BeamTreeView";
 import type {
   BeamParameters,
+  Capabilities,
   CandidateMolecule,
+  ModificationMode,
   SearchProgress,
   SearchResult,
   TargetProperties,
@@ -188,6 +190,67 @@ function NumberField({
   );
 }
 
+function ModePicker({
+  mode,
+  onChange,
+  capabilities,
+}: {
+  mode: ModificationMode;
+  onChange: (mode: ModificationMode) => void;
+  capabilities: Capabilities | null;
+}) {
+  const plannerUnavailable = capabilities != null && !capabilities.planner_available;
+  const plannerReason =
+    capabilities?.planner_unavailable_reason ||
+    "Learned planner is unavailable: torch or the planner checkpoint is missing.";
+
+  return (
+    <fieldset className="mode-picker">
+      <legend className="mode-picker-legend">Modifier for this run</legend>
+      <label className="mode-choice">
+        <input
+          type="radio"
+          name="modification-mode"
+          value="planner"
+          checked={mode === "planner"}
+          onChange={() => onChange("planner")}
+        />
+        <span className="mode-choice-copy">
+          <span className="option-label">Learned planner</span>
+          <span className="option-description">
+            Graph model proposes reaction family, reagent, and site. Requires torch and a planner checkpoint.
+          </span>
+        </span>
+      </label>
+      <label className="mode-choice">
+        <input
+          type="radio"
+          name="modification-mode"
+          value="rule_based"
+          checked={mode === "rule_based"}
+          onChange={() => onChange("rule_based")}
+        />
+        <span className="mode-choice-copy">
+          <span className="option-label">Rule-based modifier</span>
+          <span className="option-description">
+            Rank documented reaction reagents by whether they close the gap to the target properties.
+          </span>
+        </span>
+      </label>
+      {plannerUnavailable && mode === "planner" ? (
+        <p className="notice-message" role="status">
+          <strong>Cannot start with the learned planner.</strong>
+          {plannerReason} Start search is disabled. The run will not fall back to the rule-based modifier.
+        </p>
+      ) : plannerUnavailable ? (
+        <p className="notice-message" role="status">
+          {plannerReason}
+        </p>
+      ) : null}
+    </fieldset>
+  );
+}
+
 function ToggleField({
   checked,
   onChange,
@@ -344,6 +407,11 @@ function RunMonitor({
       <div className="run-heading">
         <span className={statusClass(progress.status)}>{progress.status}</span>
         <span className="run-id">Run {progress.job_id.slice(0, 8)}</span>
+        {result?.mode ? (
+          <span className={result.mode === "planner" ? "tag tag--learned" : "tag"}>
+            {result.mode === "planner" ? "Learned planner" : "Rule-based"}
+          </span>
+        ) : null}
       </div>
 
       <div className="iteration-progress">
@@ -401,6 +469,9 @@ function RunMonitor({
 export default function App() {
   const [targets, setTargets] = useState(DEFAULT_TARGETS);
   const [beam, setBeam] = useState(DEFAULT_BEAM);
+  const [mode, setMode] = useState<ModificationMode>("rule_based");
+  const [modeTouched, setModeTouched] = useState(false);
+  const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [progress, setProgress] = useState<SearchProgress | null>(null);
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -409,6 +480,31 @@ export default function App() {
 
   const setT = (k: keyof TargetProperties, v: number) => setTargets((t) => ({ ...t, [k]: v }));
   const setB = <K extends keyof BeamParameters>(k: K, v: BeamParameters[K]) => setBeam((b) => ({ ...b, [k]: v }));
+
+  useEffect(() => {
+    let cancelled = false;
+    getCapabilities()
+      .then((caps) => {
+        if (cancelled) return;
+        setCapabilities(caps);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setCapabilities({
+          planner_available: false,
+          planner_unavailable_reason: `Could not check planner availability: ${String((e as Error).message || e)}`,
+          rule_based_available: true,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!capabilities || modeTouched) return;
+    if (capabilities.planner_available) setMode("planner");
+  }, [capabilities, modeTouched]);
 
   useEffect(() => {
     if (!jobId || !running) return;
@@ -420,6 +516,9 @@ export default function App() {
           const r = await getResult(jobId);
           setResult(r);
           setRunning(false);
+          if (p.status === "failed") {
+            setError(p.message || "Search failed.");
+          }
         }
       } catch (e: unknown) {
         setError(String((e as Error).message || e));
@@ -433,9 +532,16 @@ export default function App() {
     setError(null);
     setResult(null);
     setProgress(null);
+    if (mode === "planner" && capabilities && !capabilities.planner_available) {
+      setError(
+        capabilities.planner_unavailable_reason ||
+          "Learned planner is unavailable: torch or the planner checkpoint is missing. The search will not fall back to the rule-based modifier."
+      );
+      return;
+    }
     setRunning(true);
     try {
-      const p = await createSearch({ targets, beam });
+      const p = await createSearch({ targets, beam, mode });
       setJobId(p.job_id);
       setProgress(p);
     } catch (e: unknown) {
@@ -450,6 +556,7 @@ export default function App() {
   };
 
   const exportHref = useMemo(() => (jobId ? `/api/v1/search/${jobId}/export.csv` : "#"), [jobId]);
+  const plannerBlocked = mode === "planner" && capabilities != null && !capabilities.planner_available;
 
   return (
     <>
@@ -485,6 +592,21 @@ export default function App() {
           <section className="brief-section">
             <div className="brief-section-heading">
               <span>02</span>
+              <h2>Modifier</h2>
+            </div>
+            <ModePicker
+              mode={mode}
+              capabilities={capabilities}
+              onChange={(next) => {
+                setModeTouched(true);
+                setMode(next);
+              }}
+            />
+          </section>
+
+          <section className="brief-section">
+            <div className="brief-section-heading">
+              <span>03</span>
               <h2>Search bounds</h2>
             </div>
             <div className="controls-grid">
@@ -547,7 +669,13 @@ export default function App() {
           <ScoringReference />
 
           <div className="brief-actions">
-              <button type="button" className="action action--primary" onClick={onStart} disabled={running}>
+              <button
+                type="button"
+                className="action action--primary"
+                onClick={onStart}
+                disabled={running || plannerBlocked}
+                title={plannerBlocked ? (capabilities?.planner_unavailable_reason ?? undefined) : undefined}
+              >
                 {running ? "Searching…" : "Start search"}
               </button>
               <button type="button" className="action action--secondary" onClick={onCancel} disabled={!running}>
@@ -568,7 +696,10 @@ export default function App() {
               <p className="eyebrow">Target-directed search</p>
               <h1>Molecular search canvas</h1>
             </div>
-            <p>Seed selection → learned modification → property estimation → beam ranking</p>
+            <p>
+              Seed selection → {mode === "planner" ? "learned planner" : "rule-based modifier"} →
+              property estimation → beam ranking
+            </p>
           </header>
 
           <TargetProfile targets={targets} />

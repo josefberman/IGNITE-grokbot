@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.app.domain.models import BeamParameters, TargetProperties
+from backend.app.domain.models import BeamParameters, ModificationMode, TargetProperties
 from backend.app.services.beam_search import BeamSearchController
 from backend.app.services.modification import ModificationMechanism
 from backend.app.services.novelty import NoveltyService
@@ -54,7 +54,13 @@ def test_beam_search_bounded(controller):
         enable_patent_search=False,
         early_stop_on_mape=False,
     )
-    best, top, progress, beam_tree = controller.run("test-job", targets, beam)
+    best, top, progress, beam_tree = controller.run(
+        "test-job", targets, beam, mode=ModificationMode.RULE_BASED
+    )
+    assert controller.last_run_log is not None
+    assert controller.last_run_log["mode"] == "rule_based"
+    assert controller.last_run_log["seed_smiles"]
+    assert controller.last_run_log["candidates"]
     assert best.canonical_smiles
     assert len(beam_tree.nodes) >= 1
     assert len(beam_tree.beam_layers) >= 1

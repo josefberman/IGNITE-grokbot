@@ -19,13 +19,19 @@ from backend.app.domain.models import (
     BeamParameters,
     JobStatus,
     ModelMetadata,
+    ModificationMode,
     SearchProgress,
     SearchRequest,
     SearchResult,
 )
 from backend.app.db.jobs import JobStore
 from backend.app.services.beam_search import BeamSearchController
-from backend.app.services.modification import ModificationMechanism
+from backend.app.services.modification import (
+    ModificationMechanism,
+    PlannerUnavailableError,
+    planner_capability,
+)
+from backend.app.services.run_logger import RunLogger
 from backend.app.services.molecule_identity import MoleculeIdentityResolver
 from backend.app.services.novelty import NoveltyService
 from backend.app.services.prediction import PropertyPredictor
@@ -38,6 +44,7 @@ settings.data_dir.mkdir(parents=True, exist_ok=True)
 
 store = JobStore(str(settings.database_url))
 _controllers: dict[str, BeamSearchController] = {}
+_run_logger = RunLogger(settings.run_log_dir, enabled=settings.run_logging_enabled)
 
 
 def _build_controller(beam: BeamParameters | None = None) -> BeamSearchController:
@@ -81,6 +88,7 @@ def _clamp_beam(beam: BeamParameters) -> BeamParameters:
 
 
 def _run_job(job_id: str) -> None:
+    req = None
     try:
         req = store.get_request(job_id)
         beam = _clamp_beam(req.beam)
@@ -93,7 +101,7 @@ def _run_job(job_id: str) -> None:
             store.update_progress(progress)
 
         best, top, progress, beam_tree = controller.run(
-            job_id, req.targets, beam, on_progress=on_progress
+            job_id, req.targets, beam, on_progress=on_progress, mode=req.mode
         )
         result = SearchResult(
             job_id=job_id,
@@ -102,8 +110,26 @@ def _run_job(job_id: str) -> None:
             top_k=top,
             progress=progress,
             beam_tree=beam_tree,
+            mode=req.mode,
         )
         store.set_result(result)
+        if controller.last_run_log:
+            _run_logger.write(controller.last_run_log)
+    except PlannerUnavailableError as e:
+        progress = SearchProgress(
+            job_id=job_id,
+            status=JobStatus.FAILED,
+            message=str(e),
+        )
+        store.update_progress(progress)
+        store.set_result(
+            SearchResult(
+                job_id=job_id,
+                status=JobStatus.FAILED,
+                progress=progress,
+                mode=req.mode if req else None,
+            )
+        )
     except Exception as e:
         progress = SearchProgress(
             job_id=job_id,
@@ -112,7 +138,12 @@ def _run_job(job_id: str) -> None:
         )
         store.update_progress(progress)
         store.set_result(
-            SearchResult(job_id=job_id, status=JobStatus.FAILED, progress=progress)
+            SearchResult(
+                job_id=job_id,
+                status=JobStatus.FAILED,
+                progress=progress,
+                mode=req.mode if req else None,
+            )
         )
     finally:
         _controllers.pop(job_id, None)
@@ -138,6 +169,11 @@ def health():
     return {"status": "ok", "service": "ignite"}
 
 
+@app.get("/api/v1/capabilities")
+def capabilities():
+    return planner_capability()
+
+
 @app.get("/api/v1/molecule/depict")
 def depict_molecule(smiles: str, size: int = 320):
     """Return a 2D PNG depiction of the molecule (RDKit)."""
@@ -157,6 +193,14 @@ def list_models():
 @app.post("/api/v1/search", response_model=SearchProgress)
 def create_search(request: SearchRequest):
     request.beam = _clamp_beam(request.beam)
+    if request.mode == ModificationMode.PLANNER:
+        cap = planner_capability()
+        if not cap["planner_available"]:
+            raise HTTPException(
+                400,
+                cap["planner_unavailable_reason"]
+                or "Learned planner is unavailable: torch or the planner checkpoint is missing.",
+            )
     job_id = store.create(request)
     threading.Thread(target=_run_job, args=(job_id,), daemon=True).start()
     return SearchProgress(job_id=job_id, status=JobStatus.QUEUED, message="Queued", max_iterations=request.beam.depth)

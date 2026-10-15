@@ -18,3 +18,4 @@ ml/checkpoints/
 *.pt
 *.ckpt
 frontend/node_modules/
+logs/

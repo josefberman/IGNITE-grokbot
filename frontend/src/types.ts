@@ -5,6 +5,14 @@ export type TargetProperties = {
   hf_solid: number;
 };
 
+export type ModificationMode = "planner" | "rule_based";
+
+export type Capabilities = {
+  planner_available: boolean;
+  planner_unavailable_reason: string | null;
+  rule_based_available: boolean;
+};
+
 export type BeamParameters = {
   depth: number;
   width: number;
@@ -80,5 +88,6 @@ export type SearchResult = {
   top_k: CandidateMolecule[];
   progress: SearchProgress;
   beam_tree?: BeamSearchTree | null;
+  mode?: ModificationMode | null;
   disclaimer: string;
 };
