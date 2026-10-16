@@ -12,7 +12,7 @@ from rdkit.Chem import AllChem
 
 from backend.app.domain.models import ModificationMode, ModificationRecord, PROPERTY_KEYS
 from backend.app.services.chemistry import edit_distance_proxy, validate_molecule
-from backend.app.services.reaction_directions import rank_reagents_for_gap
+from backend.app.services.reagents import apply_reagent_random_sites, rank_reagents_for_gap
 from backend.app.services.reaction_primitives import (
     StrategyPoolModifier,
     list_planner_vocab,
@@ -532,36 +532,29 @@ class ModificationMechanism:
                     break
             return products[:n]
 
-        # Rule-based: rank documented reagents by how they close the property gap.
+        # Rule-based: reagent level only. Rank reagents by whether their documented
+        # effects close the gap, then try each reagent's valid sites in seeded
+        # random order. No reaction family is consulted.
         if mol is None:
             return products[:n]
-        ranked = rank_reagents_for_gap(
-            parent_props,
-            targets,
-            parent_smiles=parent_smiles,
-            skip=tried,
-        )
-        for reaction_id in ranked:
+        for reagent_id in rank_reagents_for_gap(parent_props, targets, skip=tried):
             if len(products) >= n:
                 break
-            if reaction_id in tried:
-                continue
-            tried.add(reaction_id)
-            prim = self._prims.get(reaction_id)
-            group = prim.get("group", reaction_id) if prim else reaction_id
-            for smi, _variant, smarts in self._apply_family(
-                parent_smiles, mol, reaction_id, max_products=family_cap
-            ):
+            tried.add(reagent_id)
+            for smi, smarts in apply_reagent_random_sites(parent_smiles, reagent_id, self.rng):
                 if self._accept(
                     parent_smiles,
                     smi,
-                    family=group,
-                    reagent=reaction_id,
+                    family=reagent_id,
+                    reagent=reagent_id,
                     smarts=smarts,
                     planner="rule_based",
                     seen=seen,
                     products=products,
                     n=n,
                 ):
+                    break
+                # One site per reagent per expansion; move to the next reagent.
+                if products and products[-1][1].reagent == reagent_id:
                     break
         return products[:n]

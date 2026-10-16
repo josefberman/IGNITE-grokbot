@@ -2,6 +2,8 @@
 
 The planner predicts a **family** (the broad class), then a **reagent** (one specific reaction inside that class). SMARTS spellings of the same reaction are apply-time fallbacks, not separate reagents.
 
+Families apply to the learned planner only. The rule-based modifier ignores families; its source of truth is the flat reagent list in [reagents.md](reagents.md).
+
 There are 11 families and 62 reagents. The sign column is the strategy-pool direction `(Δdensity, Δdetonation velocity, Δdetonation pressure, Δenthalpy of formation)`, each component in `{−1, 0, +1}`. It is a design label, not a measured delta.
 
 ## Nitration

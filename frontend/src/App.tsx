@@ -233,7 +233,7 @@ function ModePicker({
         <span className="mode-choice-copy">
           <span className="option-label">Rule-based modifier</span>
           <span className="option-description">
-            Rank documented reaction reagents by whether they close the gap to the target properties.
+            Ranks a flat list of reagents by whether each one's documented effect (raise, lower, or neutral) on each property closes the gap to the targets, then picks a reaction site at random (seeded). No reaction families.
           </span>
         </span>
       </label>
@@ -715,7 +715,9 @@ export default function App() {
             </header>
             <p className="prose">
               Each column is one modification generation. Later rounds edit molecules already in the
-              tree again, with the next unused family and reagent, and hang the new molecule underneath.
+              tree again, with the next unused{" "}
+              {result.beam_tree.nodes.some((n) => n.planner === "learned") ? "family and reagent" : "reagent"}, and hang
+              the new molecule underneath.
               {result.beam_tree.max_generation != null && result.beam_tree.iterations_completed != null ? (
                 <>
                   {" "}

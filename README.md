@@ -217,7 +217,7 @@ Open [http://localhost:5173](http://localhost:5173). You do not type a SMILES. T
 | Mode | GUI default | Effect |
 | ---- | ----------- | ------ |
 | Learned planner | selected when torch and `planner.pt` are available | Graph model proposes family, reagent, and site. If torch or the checkpoint is missing, the GUI explains why and the search does not start. |
-| Rule-based modifier | selected when the planner is unavailable | Ranks reagents from [docs/reaction_families.md](docs/reaction_families.md) by whether their documented direction closes the gap between the seed's predicted properties and the targets. Documented `0` is treated as **neutral**. Family-level mixed signs are **unknown** and are not guessed; ranking uses the specific reagent. |
+| Rule-based modifier | selected when the planner is unavailable | Works only at the reagent level: a flat list of reagents in [docs/reagents.md](docs/reagents.md), each with a raise/lower/neutral effect on density, detonation velocity, detonation pressure, and Hf. It ranks reagents by whether their effects close the gap between the seed's predicted properties and the targets, and picks the reaction site at random among the reagent's valid sites (seeded by the run's random seed). Reaction families play no part. |
 
 
 **Toggles:**
