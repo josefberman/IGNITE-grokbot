@@ -263,6 +263,18 @@ Optional `.env` variables, prefix `IGNITE_`:
 
 Each completed search writes one JSON file under `IGNITE_RUN_LOG_DIR` (default `logs/`, gitignored). The file includes the UTC timestamp, target properties, modifier mode (`planner` or `rule_based`), seed SMILES, and every accepted candidate with predicted properties, MAPE fit, SAScore / synthesis-ease penalty, edit-distance / change size, and overall rank/score.
 
+It also contains `best_path`: the ordered chain from the seed (step 0) to the final best molecule, reconstructed from parent links in the beam search. Each step carries `step`, `generation`, `smiles`, `parent_smiles`, `predicted_properties` (density, det_velocity, det_pressure, hf_solid), `fit.mape`, `synthesis_ease` (SAScore and penalty), `change_size` (edit distance and penalty), `overall.score`, and `edit`: the edit applied to reach that step (`null` for the seed). In `rule_based` mode `edit.reagent` (and `edit.reaction_family`) is the reagent id; in `planner` mode `edit.reaction_family` is the planner's reaction family and `edit.reagent` the reaction applied. Abridged example from a real `rule_based` run:
+
+```json
+"best_path": [
+  {"step": 0, "smiles": "Cc1ccc([N+](=O)[O-])cc1", "fit": {"mape": 60.57}, "overall": {"score": 0.557}, "edit": null},
+  {"step": 1, "smiles": "Cc1ccc([N+](=O)[O-])c(-c2nncnn2)c1", "fit": {"mape": 32.68}, "overall": {"score": 0.318},
+   "edit": {"reaction_family": "tetrazine_CH", "reagent": "tetrazine_CH", "planner": "rule_based", "smarts": "[cH:1]>>[c:1]c1nncnn1"}},
+  {"step": 2, "smiles": "O=[N+]([O-])Cc1ccc([N+](=O)[O-])c(-c2nncnn2)c1", "fit": {"mape": 23.89}, "overall": {"score": 0.228},
+   "edit": {"reaction_family": "nitrate_alkyl_CH", "reagent": "nitrate_alkyl_CH", "planner": "rule_based", "smarts": "[CX4;!H0:1]>>[C:1][N+](=O)[O-]"}}
+]
+```
+
 
 ## API
 
