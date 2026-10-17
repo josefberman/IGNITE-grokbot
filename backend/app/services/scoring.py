@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from backend.app.domain.models import (
     PROPERTY_KEYS,
@@ -90,3 +90,34 @@ def score_candidate(
         total=total,
         weights=w,
     )
+
+
+def seed_comparable_score(candidate: CandidateMolecule) -> float:
+    """Total score without the minimal-edit term; used only for child-vs-seed comparisons."""
+    if candidate.score is None:
+        return 1e9
+    s = candidate.score
+    return s.total - s.weights.get("minimal_edit", 0.0) * s.minimal_edit_penalty
+
+
+def rank_candidates(candidates: List[CandidateMolecule]) -> List[CandidateMolecule]:
+    """Order candidates, best first.
+
+    Child vs seed: compared on the edit-free score (MAPE + SAScore part), so a child
+    is not beaten by the seed just for having edits; ties go to the seed.
+    Child vs child: compared on the full total, so the minimal-edit penalty still
+    ranks modifications among themselves.
+
+    Result: [children that beat the best seed, by total] + seeds + [other children, by total].
+    """
+    def total(c: CandidateMolecule):
+        return (c.score.total if c.score else 1e9, c.mape)
+
+    children = sorted((c for c in candidates if c.generation > 0), key=total)
+    seeds = sorted((c for c in candidates if c.generation == 0), key=total)
+    if not seeds:
+        return children
+    bar = seed_comparable_score(seeds[0])
+    winners = [c for c in children if seed_comparable_score(c) < bar]
+    rest = [c for c in children if seed_comparable_score(c) >= bar]
+    return winners + seeds + rest

@@ -246,6 +246,14 @@ Then **Start search**. **Cancel** stops the running job. After completion, **Exp
 
 These are sent with every search but have no GUI control: random seed `42`, and patent lookup on (`enable_patent_search`). Patent providers still need API keys (below) or the patent check is incomplete.
 
+#### Scoring and ranking
+
+Each candidate gets a score where lower is better: `0.65·min(MAPE/100, 1) + 0.25·SAScore penalty + 0.10·minimal-edit penalty`. The minimal-edit penalty is `edit_distance / 10`, capped at 1. Exploring iterations shift the weights to 0.85 / 0.10 / 0.05.
+
+- **Children against each other** are compared on the full score, so the minimal-edit penalty still favors smaller changes.
+- **A child against the seed** is compared on the score without the minimal-edit term. The seed has no edits, so a child is not beaten just for having been modified. A child outranks the seed only if its MAPE + SAScore part is strictly lower. Ties go to the seed.
+- **Order:** children that beat the seed (by full score), then the seed, then the other children (by full score). This order picks beam survivors, the running best, and the final top-k.
+
 #### Server environment
 
 Optional `.env` variables, prefix `IGNITE_`:

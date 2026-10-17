@@ -23,7 +23,7 @@ from backend.app.services.novelty import NoveltyService
 from backend.app.services.run_logger import build_run_log
 from backend.app.services.property_estimator import PropertyEstimator
 from backend.app.services.safety import estimate_safety
-from backend.app.services.scoring import score_candidate
+from backend.app.services.scoring import score_candidate, rank_candidates
 from backend.app.services.seed_selector import SeedLibrary
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class BeamSearchController:
         explore: bool,
     ) -> List[CandidateMolecule]:
         """Keep top_k by score, reserving slots for generated children while exploring."""
-        ranked = sorted(pool, key=lambda c: c.score.total if c.score else 1e9)
+        ranked = rank_candidates(pool)
         if not explore or top_k <= 1:
             return ranked[:top_k]
 
@@ -95,7 +95,7 @@ class BeamSearchController:
                 continue
             chosen.append(c)
 
-        return sorted(chosen, key=lambda c: c.score.total if c.score else 1e9)[:top_k]
+        return rank_candidates(chosen)[:top_k]
 
     def run(
         self,
@@ -348,21 +348,12 @@ class BeamSearchController:
             _sync_beam_layer(beam_nodes)
             if beam_nodes:
                 # Final best: prefer lowest total among survivors; break seed ties by MAPE
-                candidate_best = min(
-                    beam_nodes,
-                    key=lambda c: (
-                        c.score.total if c.score else 1e9,
-                        c.mape,
-                        0 if c.generation > 0 else 1,
-                    ),
-                )
+                # Children vs seed: edit-free score; children among themselves: full total.
+                candidate_best = rank_candidates(beam_nodes)[0]
                 if (
                     best.score is None
-                    or candidate_best.score.total < best.score.total - 1e-9
-                    or (
-                        abs(candidate_best.score.total - best.score.total) < 1e-9
-                        and candidate_best.mape < best.mape
-                    )
+                    or rank_candidates([best, candidate_best])[0] is candidate_best
+                    and candidate_best is not best
                     or (exploring and best.generation == 0 and candidate_best.generation > 0
                         and candidate_best.mape <= best.mape + 1.0)
                 ):
@@ -396,7 +387,7 @@ class BeamSearchController:
         for c in beam_nodes:
             c.score = score_candidate(c, target_dict, explore=False)
             c.mape = c.score.mape
-        top = sorted(beam_nodes, key=lambda c: (c.score.total if c.score else 1e9, c.mape))
+        top = rank_candidates(beam_nodes)
         best = top[0] if top else best
         best.score = score_candidate(best, target_dict, explore=False)
         best.mape = best.score.mape
