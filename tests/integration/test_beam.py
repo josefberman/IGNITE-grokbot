@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(scope="module")
 def seeds():
-    return SeedLibrary(ROOT / "sample_start_molecules.csv")
+    return SeedLibrary(ROOT / "data" / "seeds" / "energetic_seed_library.csv")
 
 
 @pytest.fixture(scope="module")

@@ -28,9 +28,18 @@ COLUMN_MAP = {
 }
 
 
+# XGBoost training data; never a seed library.
+TRAINING_DATA_FILENAME = "sample_start_molecules.csv"
+
+
 class SeedLibrary:
     def __init__(self, csv_path: Path | str):
         self.csv_path = Path(csv_path)
+        if self.csv_path.name == TRAINING_DATA_FILENAME:
+            raise ValueError(
+                f"{TRAINING_DATA_FILENAME} is the XGBoost training dataset and cannot be used as a "
+                "seed library; use data/seeds/energetic_seed_library.csv (IGNITE_SEED_CSV)."
+            )
         self.df = self._load()
 
     def _load(self) -> pd.DataFrame:
@@ -57,8 +66,16 @@ class SeedLibrary:
             if not ok:
                 continue
             seen.add(can)
+            prov = {}
+            for key in PROPERTY_KEYS:
+                col = f"{key}_provenance"
+                if col in df.columns and not pd.isna(row.get(col)):
+                    prov[col] = str(row[col]).strip().lower()
+            if "name" in df.columns and not pd.isna(row.get("name")):
+                prov["name"] = str(row["name"])
             records.append(
                 {
+                    **prov,
                     "source_row": int(idx),
                     "smiles": smiles,
                     "canonical_smiles": can,
@@ -90,7 +107,15 @@ class SeedLibrary:
                 inchikey=row.get("inchikey"),
                 generation=0,
                 properties={
-                    k: PropertyEstimate(value=props[k], source=PredictionSource.DATASET, confidence=0.9)
+                    k: PropertyEstimate(
+                        value=props[k],
+                        source=(
+                            PredictionSource.XGBOOST
+                            if row.get(f"{k}_provenance") == "predicted"
+                            else PredictionSource.DATASET
+                        ),
+                        confidence=0.65 if row.get(f"{k}_provenance") == "predicted" else 0.9,
+                    )
                     for k in PROPERTY_KEYS
                 },
                 mape=mape,

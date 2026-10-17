@@ -34,6 +34,9 @@ class LiteratureRetriever:
             smi = canonicalize(str(row.get("canonical_smiles") or row.get("smiles") or ""))
             if not smi:
                 continue
+            # Values the seed CSV marks as model predictions are not literature.
+            if any(str(row.get(f"{k}_provenance", "")).lower() == "predicted" for k in PROPERTY_KEYS):
+                continue
             props = {}
             ok = True
             for k in PROPERTY_KEYS:

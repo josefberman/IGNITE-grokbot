@@ -8,7 +8,7 @@ Maps every architecture-diagram box to an owned IGNITE module.
 |-------------|--------|
 | Target properties from user | [`backend/app/domain/models.py`](../../backend/app/domain/models.py) `TargetProperties` + GUI form |
 | Input parameters (X, N, K, MAPE) | `BeamParameters` + API validation in [`backend/app/main.py`](../../backend/app/main.py) |
-| Seed molecules file | [`sample_start_molecules.csv`](../../sample_start_molecules.csv) + [`seed_selector.py`](../../backend/app/services/seed_selector.py) |
+| Seed molecules file | [`data/seeds/energetic_seed_library.csv`](../../data/seeds/energetic_seed_library.csv) + [`seed_selector.py`](../../backend/app/services/seed_selector.py) |
 | Seed Selector (MAPE) | [`seed_selector.py`](../../backend/app/services/seed_selector.py) `select_seeds` |
 | Beam Search Controller | [`beam_search.py`](../../backend/app/services/beam_search.py) |
 | Modification Mechanism | [`modification.py`](../../backend/app/services/modification.py) + [`reaction_primitives.py`](../../backend/app/services/reaction_primitives.py) + [`ml/models/architectures.py`](../../ml/models/architectures.py) |

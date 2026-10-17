@@ -16,7 +16,10 @@ class Settings(BaseSettings):
 
     data_dir: Path = ROOT / "data"
     models_dir: Path = ROOT / "models"
-    seed_csv: Path = ROOT / "sample_start_molecules.csv"
+    # Seed library for search: curated well-known neutral energetic molecules with
+    # per-value citations/provenance. Override with IGNITE_SEED_CSV. The ~16k-row
+    # sample_start_molecules.csv is XGBoost training data only and is refused as seeds.
+    seed_csv: Path = ROOT / "data" / "seeds" / "energetic_seed_library.csv"
     database_url: str = f"sqlite+aiosqlite:///{ROOT / 'data' / 'ignite.db'}"
     redis_url: str = ""
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
