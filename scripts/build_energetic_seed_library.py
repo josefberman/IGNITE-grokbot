@@ -108,21 +108,120 @@ MOLECULES = [
     ("DATB", "Nc1c([N+](=O)[O-])cc([N+](=O)[O-])c(N)c1[N+](=O)[O-]", {}),
 ]
 
+PUBCHEM_NOTE = "structure checked against PubChem CID {cid}"
+
+# Expansion batches (Oct 2026). Each batch is appended independently; a value is
+# 'literature' only when it was read from the cited page's chembox (with its
+# references). Structures without a checked value are fully predicted, but their
+# SMILES were matched (InChIKey) against the PubChem CID noted in the comment.
+BATCH_1_NITRO_AROMATICS = [
+    ("1,3-Dinitrobenzene", "C1=CC(=CC(=C1)[N+](=O)[O-])[N+](=O)[O-]",
+     {"density": (1.575, wiki("1,3-Dinitrobenzene"))}),
+    ("Picramide", "c1c(cc(c(c1[N+](=O)[O-])N)[N+](=O)[O-])[N+](=O)[O-]",
+     {"density": (1.8, wiki("2,4,6-Trinitroaniline")), "det_velocity": (7300, wiki("2,4,6-Trinitroaniline"))}),
+    ("2,4,6-Trinitroanisole", "COc1c([N+](=O)[O-])cc([N+](=O)[O-])cc1[N+](=O)[O-]",
+     {"density": (1.61, wiki("Trinitroanisole"))}),
+    ("Styphnic acid", "c1c(c(c(c(c1[N+](=O)[O-])O)[N+](=O)[O-])O)[N+](=O)[O-]",
+     {"density": (1.829, wiki("Styphnic_acid"))}),
+    ("Picryl chloride", "C1=C(C=C(C(=C1[N+](=O)[O-])Cl)[N+](=O)[O-])[N+](=O)[O-]",
+     {"det_velocity": (7200, wiki("Picryl_chloride"))}),
+    ("Hexanitrodiphenylamine", "C1=C(C=C(C(=C1[N+](=O)[O-])NC2=C(C=C(C=C2[N+](=O)[O-])[N+](=O)[O-])[N+](=O)[O-])[N+](=O)[O-])[N+](=O)[O-]",
+     {"det_velocity": (7100, wiki("Hexanitrodiphenylamine", "D for pressed material; chembox density 1.64 is pressed, not TMD, so not used"))}),
+    ("2,4-Dinitrophenol", "O=[N+]([O-])c1cc(ccc1O)[N+]([O-])=O",
+     {"det_velocity": (5000, wiki("2,4-Dinitrophenol", "Encyclopedia of Explosives"))}),
+    ("2,4-Dinitroaniline", "C1=CC(=C(C=C1[N+](=O)[O-])[N+](=O)[O-])N",
+     {"density": (1.61, wiki("2,4-Dinitroaniline"))}),
+    ("1,3,5-Triazido-2,4,6-trinitrobenzene", "O=[N+](c1c(N=[N+]=[N-])c([N+]([O-])=O)c(N=[N+]=[N-])c([N+]([O-])=O)c1N=[N+]=[N-])[O-]",
+     {"det_velocity": (7350, wiki("1,3,5-Triazido-2,4,6-trinitrobenzene"))}),
+    ("Nitrobenzene", "c1ccc(cc1)[N+](=O)[O-]",
+     {"density": (1.199, wiki("Nitrobenzene", "liquid"))}),
+    ("2,4,6-Trinitrobenzoic acid", "C1=C(C=C(C(=C1[N+](=O)[O-])C(=O)O)[N+](=O)[O-])[N+](=O)[O-]", {}),  # SMILES from Wikipedia chembox
+    ("2,6-Dinitrotoluene", "Cc1c([N+](=O)[O-])cccc1[N+](=O)[O-]", {}),  # PubChem CID 11813
+    ("1,5-Dinitronaphthalene", "O=[N+]([O-])c1cccc2c([N+](=O)[O-])cccc12", {}),  # CID 11803
+    ("Hexanitroazobenzene", "O=[N+]([O-])c1cc([N+](=O)[O-])c(/N=N/c2c([N+](=O)[O-])cc([N+](=O)[O-])cc2[N+](=O)[O-])c([N+](=O)[O-])c1", {}),  # CID 519640
+    ("PYX", "O=[N+]([O-])c1cc([N+](=O)[O-])c(Nc2nc(Nc3c([N+](=O)[O-])cc([N+](=O)[O-])cc3[N+](=O)[O-])c([N+](=O)[O-])cc2[N+](=O)[O-])c([N+](=O)[O-])c1", {}),  # CID 14597089
+    ("Trinitrophloroglucinol", "O=[N+]([O-])c1c(O)c([N+](=O)[O-])c(O)c([N+](=O)[O-])c1O", {}),  # CID 4555524
+    ("Diazodinitrophenol", "[N-]=[N+]=C1C=C([N+](=O)[O-])C=C([N+](=O)[O-])C1=O",
+     {"density": (1.715, wiki("Diazodinitrophenol", "midpoint of 1.71-1.72 (pure)"))}),  # CID 5463880
+]
+
+BATCH_2_NITRATE_ESTERS_AND_ALIPHATICS = [
+    ("Methyl nitrate", "[O-][N+](=O)OC",
+     {"density": (1.203, wiki("Methyl_nitrate", "liquid")),
+      "det_velocity": (6300, wiki("Methyl_nitrate", "D at rho=1.217, citing Meyer/Koehler/Homburg 'Explosives'"))}),
+    ("Ethyl nitrate", "CCO[N+](=O)[O-]", {"density": (1.10, wiki("Ethyl_nitrate", "liquid"))}),
+    ("Isopropyl nitrate", "CC(C)O[N+](=O)[O-]", {"density": (1.036, wiki("Isopropyl_nitrate", "liquid"))}),
+    ("DEGDN", "C(CO[N+](=O)[O-])OCCO[N+](=O)[O-]",
+     {"density": (1.3846, wiki("Diethylene_glycol_dinitrate", "liquid, 20 C"))}),
+    ("TEGDN", "C(CO[N+](=O)[O-])OCCOCCO[N+](=O)[O-]", {"density": (1.33, wiki("Triethylene_glycol_dinitrate", "liquid"))}),
+    ("TMETN", "CC(CO[N+]([O-])=O)(CO[N+]([O-])=O)CO[N+]([O-])=O", {"density": (1.47, wiki("Trimethylolethane_trinitrate", "liquid"))}),
+    ("BTTN", "O=[N+]([O-])OC(CCO[N+]([O-])=O)CO[N+](=O)[O-]", {"density": (1.52, wiki("1,2,4-Butanetriol_trinitrate", "liquid"))}),
+    ("PGDN", "O=[N+]([O-])OC(C)CO[N+](=O)[O-]", {"density": (1.232, wiki("Propylene_glycol_dinitrate", "liquid, 20 C, GESTIS"))}),
+    ("Nitroethane", "CC[N+](=O)[O-]", {"density": (1.054, wiki("Nitroethane", "liquid"))}),
+    ("1-Nitropropane", "CCC[N+](=O)[O-]", {"density": (0.998, wiki("1-Nitropropane", "liquid"))}),
+    ("2-Nitropropane", "CC(C)[N+](=O)[O-]", {"density": (0.9821, wiki("2-Nitropropane", "liquid"))}),
+    ("Tetranitromethane", "C([N+](=O)[O-])([N+](=O)[O-])([N+](=O)[O-])[N+](=O)[O-]",
+     {"density": (1.623, wiki("Tetranitromethane", "liquid"))}),
+    ("Trinitromethane", "C([N+](=O)[O-])([N+](=O)[O-])[N+](=O)[O-]", {"density": (1.469, wiki("Trinitromethane"))}),
+    ("Hexanitroethane", "C(C([N+](=O)[O-])([N+](=O)[O-])[N+](=O)[O-])([N+](=O)[O-])([N+](=O)[O-])[N+](=O)[O-]", {}),
+    ("2,2,2-Trinitroethanol", "OCC([N+](=O)[O-])([N+](=O)[O-])[N+](=O)[O-]", {}),  # CID 61233
+]
+
+BATCH_3_NITRAMINES_AND_UREAS = [
+    ("DINGU", "C12C(NC(=O)N1[N+](=O)[O-])N(C(=O)N2)[N+](=O)[O-]",
+     {"density": (1.94, wiki("Dinitroglycoluril", "Zhao et al.")),
+      "det_velocity": (8450, wiki("Dinitroglycoluril", "Zhao et al.")),
+      "hf_solid": (-74 * 4.184, wiki("Dinitroglycoluril", "dHf -74 kcal/mol (Khire), converted to kJ/mol"))}),
+    ("EDNA", "C(CN[N+](=O)[O-])N[N+](=O)[O-]", {"density": (1.71, wiki("Ethylenedinitramine"))}),
+    ("Nitrourea", "C(=O)(N)N[N+](=O)[O-]",
+     {"density": (1.73, wiki("Nitrourea", "chembox D is uncited, so not used"))}),
+    ("Keto-RDX", "O=C1N([N+](=O)[O-])CN([N+](=O)[O-])CN1[N+](=O)[O-]", {}),  # K-6, CID 10933462
+    ("BCHMX", "O=[N+]([O-])N1CN([N+](=O)[O-])C2C1N([N+](=O)[O-])CN2[N+](=O)[O-]", {}),  # CID 10870106
+    ("Heptanitrocubane", "[O-][N+](=O)C14C3C2([N+]([O-])=O)C1([N+]([O-])=O)C5([N+]([O-])=O)C2([N+]([O-])=O)C3([N+]([O-])=O)C45[N+]([O-])=O", {}),
+]
+
+BATCH_4_HETEROCYCLES = [
+    ("ANPZ", "Nc1nc(N)c([N+](=O)[O-])nc1[N+](=O)[O-]", {}),  # CID 4326084
+    ("LLM-116", "Nc1c([N+](=O)[O-])n[nH]c1[N+](=O)[O-]", {}),  # CID 11480728
+    ("ANTA", "Nc1n[nH]c([N+](=O)[O-])n1", {}),  # CID 135409704
+    ("DNTF", "O=[N+]([O-])c1nonc1-c1no[n+]([O-])c1-c1nonc1[N+](=O)[O-]", {}),  # CID 605902
+    ("DAAF", "Nc1nonc1/N=[N+](/[O-])c1nonc1N", {}),  # CID 533871
+    ("3,4-Dinitropyrazole", "O=[N+]([O-])c1c[nH]nc1[N+](=O)[O-]", {}),  # CID 3620736
+    ("3,5-Dinitropyrazole", "O=[N+]([O-])c1cc([N+](=O)[O-])n[nH]1", {}),  # CID 142323
+    ("2,4-Dinitroimidazole", "O=[N+]([O-])c1c[nH]c([N+](=O)[O-])n1", {}),  # CID 21275
+    ("Trinitrotriazine", "O=[N+]([O-])C1=NC([N+]([O-])=O)=NC([N+]([O-])=O)=N1", {}),
+    ("Cyanuric triazide", "C1(=NC(=NC(=N1)N=[N+]=[N-])N=[N+]=[N-])N=[N+]=[N-]",
+     {"density": (1.73, wiki("Cyanuric_triazide", "CRC Handbook 93rd ed."))}),
+]
+
+BATCH_5_PEROXIDES = [
+    ("TATP", "CC1(C)OOC(C)(C)OOC(C)(C)OO1",
+     {"det_velocity": (5300, wiki("Acetone_peroxide", "D at maximum density 1.18 g/cm3"))}),  # CID 4380970
+    ("HMTD", "C1N2COOCN(COO1)COOC2",
+     {"density": (1.57, wiki("Hexamethylene_triperoxide_diamine"))}),
+]
+
+EXPANSION_BATCHES = [BATCH_1_NITRO_AROMATICS, BATCH_2_NITRATE_ESTERS_AND_ALIPHATICS,
+                     BATCH_3_NITRAMINES_AND_UREAS, BATCH_4_HETEROCYCLES, BATCH_5_PEROXIDES]
+
 PRED_NOTE = "XGBoost prediction (models/*.joblib, descriptor contract v1); no checked literature value"
 
 
 def main() -> None:
     predictor = PropertyPredictor(ROOT / "models")
     rows, seen = [], set()
-    for name, smi, lit in MOLECULES:
+    entries = [(n, s, l, True) for n, s, l in MOLECULES]
+    entries += [(n, s, l, False) for batch in EXPANSION_BATCHES for n, s, l in batch]
+    for name, smi, lit, core in entries:
         mol = Chem.MolFromSmiles(smi)
-        if mol is None:
-            raise ValueError(f"invalid SMILES for {name}")
-        if Chem.GetFormalCharge(mol) != 0 or "." in smi:
-            raise ValueError(f"{name} is charged or a salt")
-        can = Chem.MolToSmiles(mol)
-        if can in seen:
-            raise ValueError(f"duplicate {name}")
+        bad = mol is None or "." in smi or Chem.GetFormalCharge(mol) != 0 \
+            or any(a.GetFormalCharge() and not a.GetNeighbors() for a in mol.GetAtoms())
+        can = None if mol is None else Chem.MolToSmiles(mol)
+        if bad or can in seen:
+            if core:
+                raise ValueError(f"{name}: invalid, charged/salt, or duplicate")
+            print(f"skipping {name}: invalid, charged/salt, or duplicate")
+            continue
         seen.add(can)
         preds = predictor.predict(can) or {}
         row = {"name": name, "SMILES": can}
