@@ -408,6 +408,7 @@ class BeamSearchController:
             seed_smiles=self.last_seed_smiles,
             candidates=self.last_candidates,
             status=progress.status.value,
+            best=best,
         )
         for c in top:
             c.strip_internal_signals()

@@ -97,3 +97,64 @@ def test_structure_png():
     png = smiles_to_png("c1ccccc1", size=128)
     assert png is not None
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def _assert_best_path(controller, best):
+    path = controller.last_run_log["best_path"]
+    assert path, "best_path missing"
+    assert path[0]["step"] == 0 and path[0]["edit"] is None
+    assert path[0]["smiles"] == controller.last_run_log["seed_smiles"][0]
+    assert path[-1]["smiles"] == best.canonical_smiles
+    assert len(path) == best.generation + 1
+    for prev, step in zip(path, path[1:]):
+        assert step["parent_smiles"] == prev["smiles"]
+        assert step["edit"] is not None and step["edit"]["reagent"]
+    return path
+
+
+def test_beam_search_rule_based_best_path(controller):
+    targets = TargetProperties(density=1.8, det_velocity=8500, det_pressure=30, hf_solid=100)
+    beam = BeamParameters(depth=3, width=3, top_k=3, mape_threshold=0.5, random_seed=1,
+                          enable_literature=False, enable_patent_search=False, early_stop_on_mape=False)
+    best, *_ = controller.run("bp-rule", targets, beam, mode=ModificationMode.RULE_BASED)
+    path = _assert_best_path(controller, best)
+    for step in path[1:]:
+        assert step["edit"]["planner"] == "rule_based"
+        assert step["edit"]["reaction_family"] == step["edit"]["reagent"]
+
+
+def test_beam_search_planner_best_path_with_stub(seeds):
+    """Planner mode with the learned planner stubbed (torch is optional)."""
+    from backend.app.domain.models import ModificationRecord
+
+    class _StubLearned:
+        available = True
+        unavailable_reason = None
+
+    class _StubPlanner(ModificationMechanism):
+        def __init__(self):
+            super().__init__()
+            self.learned = _StubLearned()
+
+        def expand(self, parent_smiles, parent_props, targets, n, *, mode=None, **kw):
+            out = super().expand(parent_smiles, parent_props, targets, n,
+                                 mode=ModificationMode.RULE_BASED, **kw)
+            return [
+                (smi, ModificationRecord(reaction_family=f"group:{m.reagent}", reagent=m.reagent,
+                                         smarts=m.smarts, edit_distance=m.edit_distance, planner="learned"))
+                for smi, m in out
+            ]
+
+    predictor = PropertyPredictor(ROOT / "models")
+    estimator = PropertyEstimator(predictor, LiteratureRetriever(enabled=False))
+    novelty = NoveltyService(seed_smiles=[], pubchem_enabled=False, openalex_enabled=False)
+    ctrl = BeamSearchController(seeds, estimator, novelty, _StubPlanner())
+    targets = TargetProperties(density=1.8, det_velocity=8500, det_pressure=30, hf_solid=100)
+    beam = BeamParameters(depth=2, width=3, top_k=3, mape_threshold=0.5, random_seed=0,
+                          enable_literature=False, enable_patent_search=False, early_stop_on_mape=False)
+    best, *_ = ctrl.run("bp-planner", targets, beam, mode=ModificationMode.PLANNER)
+    assert ctrl.last_run_log["mode"] == "planner"
+    path = _assert_best_path(ctrl, best)
+    for step in path[1:]:
+        assert step["edit"]["planner"] == "learned"
+        assert step["edit"]["reaction_family"].startswith("group:")

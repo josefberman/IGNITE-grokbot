@@ -43,6 +43,48 @@ def _score_payload(candidate: CandidateMolecule) -> Dict[str, Any]:
     }
 
 
+def build_best_path(
+    best: Optional[CandidateMolecule],
+    candidates: Sequence[CandidateMolecule],
+) -> List[Dict[str, Any]]:
+    """Ordered chain seed -> ``best`` following parent links (id, then SMILES)."""
+    if best is None:
+        return []
+    by_id = {c.id: c for c in candidates}
+    by_smiles = {c.canonical_smiles: c for c in candidates}
+    by_id.setdefault(best.id, best)
+    chain: List[CandidateMolecule] = []
+    visited: set = set()
+    node: Optional[CandidateMolecule] = best
+    while node is not None and node.id not in visited:
+        visited.add(node.id)
+        chain.append(node)
+        parent = by_id.get(node.parent_id) if node.parent_id else None
+        if parent is None and node.parent_smiles:
+            parent = by_smiles.get(node.parent_smiles)
+        node = parent
+    chain.reverse()
+    steps: List[Dict[str, Any]] = []
+    for depth, cand in enumerate(chain):
+        payload = _score_payload(cand)
+        mod = cand.modification if depth > 0 else None
+        step: Dict[str, Any] = {"step": depth, "generation": cand.generation}
+        step.update(payload)
+        step["edit"] = (
+            {
+                "reaction_family": mod.reaction_family,
+                "reagent": mod.reagent,
+                "planner": mod.planner,
+                "reactive_site": mod.reactive_site,
+                "smarts": mod.smarts,
+            }
+            if mod is not None
+            else None
+        )
+        steps.append(step)
+    return steps
+
+
 def build_run_log(
     *,
     job_id: str,
@@ -52,6 +94,7 @@ def build_run_log(
     candidates: Sequence[CandidateMolecule],
     timestamp: Optional[datetime] = None,
     status: Optional[str] = None,
+    best: Optional[CandidateMolecule] = None,
 ) -> Dict[str, Any]:
     ts = timestamp or datetime.now(timezone.utc)
     target_dict = targets.as_dict() if isinstance(targets, TargetProperties) else dict(targets)
@@ -76,6 +119,7 @@ def build_run_log(
         "target_properties": target_dict,
         "seed_smiles": list(seed_smiles),
         "candidates": entries,
+        "best_path": build_best_path(best or (ranked[0] if ranked else None), candidates),
     }
 
 
