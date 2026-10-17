@@ -114,6 +114,9 @@ REAGENTS: List[Reagent] = [
     _r("ethyl_CH", LOWER, NEUTRAL, LOWER, NEUTRAL),
     _r("hydroxymethyl_CH", NEUTRAL, LOWER, NEUTRAL, LOWER),
     _r("aromatize_diene", NEUTRAL, RAISE, NEUTRAL, LOWER),
+    _r("nitramine_to_nitrosamine", LOWER, LOWER, LOWER, RAISE),
+    _r("aliphatic_nitro_to_nitroso", LOWER, LOWER, LOWER, RAISE),
+    _r("aliphatic_nitro_to_amino", NEUTRAL, LOWER, LOWER, RAISE),
 ]
 
 REAGENTS_BY_ID: Dict[str, Reagent] = {r.reagent_id: r for r in REAGENTS}

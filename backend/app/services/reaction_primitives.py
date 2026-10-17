@@ -532,6 +532,33 @@ _PRIMITIVE_ROWS: List[_PrimitiveRow] = [
      ],
      (-1, 0, +1, -1),
      "Ar–N3 → Ar–NH2."),
+    ("nitramine_to_nitrosamine",
+     [
+         ("[NX3;!$(N=O):1][N+](=O)[O-]>>[N:1]N=O", _ZEMAN),
+         ("[NX3:1][N+](=O)[O-]>>[N:1]N=O", _KLAPOTKE),
+         ("[#7X3:1][N+](=O)[O-]>>[#7:1]N=O", _AGRAWAL),
+     ],
+     (-1, -1, -1, +1),
+     "Nitramine N–NO2 \u2194 nitrosamine N–NO (loss of one O; matches "
+     "saturated ring nitramines RDX/HMX/CL-20/TEX)."),
+    ("aliphatic_nitro_to_nitroso",
+     [
+         ("[CX4:1][N+](=O)[O-]>>[C:1]N=O", _ZEMAN),
+         ("[C;X4:1][N+](=O)[O-]>>[C:1]N=O", _KLAPOTKE),
+         ("[#6X4:1][N+](=O)[O-]>>[#6:1]N=O", _AGRAWAL),
+     ],
+     (-1, -1, -1, +1),
+     "Aliphatic/cage C–NO2 \u2192 C–NO (matches fully substituted cages "
+     "such as octanitrocubane)."),
+    ("aliphatic_nitro_to_amino",
+     [
+         ("[CX4:1][N+](=O)[O-]>>[C:1]N", _KLAPOTKE),
+         ("[C;X4:1][N+](=O)[O-]>>[C:1][NH2]", _OLAH_NITRATION),
+         ("[#6X4:1][N+](=O)[O-]>>[#6:1]N", _AGRAWAL),
+     ],
+     (0, -1, -1, +1),
+     "Aliphatic/cage C–NO2 \u2192 C–NH2 reduction (matches octanitrocubane "
+     "and other cage C–NO2)."),
 
     # --- Nitrogen bases beyond amino / hydrazino / cyano --------------------
     ("guanidino_CH",
@@ -960,6 +987,9 @@ _REACTION_GROUP: Dict[str, str] = {
     "hydrogenate_CC": "reduction",
     "nitro_to_amino": "reduction",
     "azide_to_amino": "reduction",
+    "nitramine_to_nitrosamine": "reduction",
+    "aliphatic_nitro_to_nitroso": "reduction",
+    "aliphatic_nitro_to_amino": "reduction",
     "guanidino_CH": "amination",
     "amide_CH": "amination",
     "isocyanate_CH": "amination",
