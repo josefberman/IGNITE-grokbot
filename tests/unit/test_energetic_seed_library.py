@@ -21,7 +21,7 @@ def df():
 
 
 def test_csv_loads_with_schema(df):
-    assert len(df) >= 20
+    assert len(df) == 77
     for key in PROPERTY_KEYS:
         for col in (key, f"{key}_source", f"{key}_provenance"):
             assert col in df.columns
@@ -44,6 +44,31 @@ def test_provenance_complete(df):
         assert df[f"{key}_source"].fillna("").str.len().gt(10).all()
         lit = df[df[f"{key}_provenance"] == "literature"]
         assert lit[f"{key}_source"].str.contains("http").all()
+
+
+def test_no_duplicate_structures(df):
+    keys = [Chem.MolToInchiKey(Chem.MolFromSmiles(s)) for s in df["SMILES"]]
+    assert len(set(keys)) == len(keys)
+    assert df["name"].is_unique
+
+
+def test_no_ionic_fragments(df):
+    for smi in df["SMILES"]:
+        mol = Chem.MolFromSmiles(smi)
+        assert not any(a.GetFormalCharge() and a.GetDegree() == 0 for a in mol.GetAtoms()), smi
+
+
+def test_expansion_molecules_present(df):
+    for name in ["DINGU", "Keto-RDX", "BCHMX", "ANPZ", "LLM-116", "ANTA", "DNTF", "PYX",
+                 "1,3-Dinitrobenzene", "Methyl nitrate", "EDNA", "TATP", "HMTD"]:
+        assert name in set(df["name"])
+
+
+def test_provenance_counts(df):
+    lit = sum((df[f"{k}_provenance"] == "literature").sum() for k in PROPERTY_KEYS)
+    pred = sum((df[f"{k}_provenance"] == "predicted").sum() for k in PROPERTY_KEYS)
+    assert lit + pred == 4 * len(df)
+    assert lit == 105
 
 
 def test_expected_molecules_present(df):
