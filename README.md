@@ -80,7 +80,19 @@ Neither script takes flags.
 | `scripts/normalize_seeds.py`      | `sample_start_molecules.csv`                                 | `data/processed/seeds_canonical.csv`, `data/processed/seeds_all_with_lineage.csv`, `data/indexes/seed_index.json` |
 
 
-`sample_start_molecules.csv` must have a `SMILES` column and, for complete seeds, `density`, `det_velocity`, `det_pressure`, and `hf_solid`.
+`sample_start_molecules.csv` must have a `SMILES` column and, for complete rows, `density`, `det_velocity`, `det_pressure`, and `hf_solid`.
+
+`sample_start_molecules.csv` (~16k rows) is the XGBoost training dataset only. It is not a seed library: `SeedLibrary` refuses to load it.
+
+### Seed library
+
+Search seeds come from `data/seeds/energetic_seed_library.csv`: 27 well-known neutral energetic molecules (TNT, RDX, HMX, CL-20, PETN, TATB, HNS, FOX-7, NTO, LLM-105, TNAZ, nitroglycerin, picric acid, DNAN, TNB, tetryl, DATB, nitroguanidine, EGDN, BTF, ETN, MHN, HNB, ONC, TEX, nitromethane, 2,4-DNT). Salts and ions (TKX-50, ADN, AN) are left out. The columns are `name`, `SMILES` (RDKit canonical), and, for each of `density` (g/cm³), `det_velocity` (m/s), `det_pressure` (GPa), and `hf_solid` (kJ/mol), the value plus `<prop>_source` (citation or URL) and `<prop>_provenance` (`literature` or `predicted`). Literature values were checked against the cited source. Values with no checked source come from the repo's XGBoost models and are marked `predicted`. Predicted seed values are not indexed as literature by the property estimator. To rebuild the file:
+
+```bash
+python scripts/build_energetic_seed_library.py
+```
+
+This is the only seed library. To use a different CSV with the same schema, set `IGNITE_SEED_CSV`.
 
 Optional licensed tables (not required for the learned planner):
 
@@ -243,7 +255,7 @@ Optional `.env` variables, prefix `IGNITE_`:
 | ------------------------------- | --------------------------------------------- | --------------------------------------- |
 | `IGNITE_DATA_DIR`               | `data`                                        | Data root                               |
 | `IGNITE_MODELS_DIR`             | `models`                                      | XGBoost property models                 |
-| `IGNITE_SEED_CSV`               | `sample_start_molecules.csv`                  | Seed library for search                 |
+| `IGNITE_SEED_CSV`               | `data/seeds/energetic_seed_library.csv`       | Seed library for search                 |
 | `IGNITE_DATABASE_URL`           | SQLite at `data/ignite.db`                    | Job store                               |
 | `IGNITE_CORS_ORIGINS`           | `http://localhost:5173,http://localhost:3000` | Allowed browser origins                 |
 | `IGNITE_MAX_BEAM_DEPTH`         | `20`                                          | Clamp on GUI depth                      |
