@@ -129,3 +129,38 @@ def test_no_family_logic_in_rule_based_path(monkeypatch):
     mech._prims = {}  # no family table available
     out = mech.expand("Cc1ccccc1", {**_TARGET, "density": 1.2}, _TARGET, n=3, mode=ModificationMode.RULE_BASED)
     assert out
+
+
+def _seed_smiles() -> dict[str, str]:
+    import csv
+    path = ROOT / "data" / "seeds" / "energetic_seed_library.csv"
+    with path.open(encoding="utf-8") as fh:
+        return {row["name"]: row["SMILES"] for row in csv.DictReader(fh)}
+
+
+def test_rule_based_yields_candidates_for_cages_and_saturated_nitramines():
+    seeds = _seed_smiles()
+    scaffolds = ["RDX", "HMX", "CL-20", "TEX", "Octanitrocubane"]
+    for name in scaffolds:
+        smiles = seeds[name]
+        found = False
+        for reagent in REAGENTS:
+            products = apply_reagent_random_sites(smiles, reagent.reagent_id, random.Random(0))
+            if products:
+                found = True
+                break
+        assert found, f"rule-based modifier produced no candidate for {name}"
+
+
+def test_new_cage_reagents_match_expected_scaffolds():
+    seeds = _seed_smiles()
+    expected = {
+        "nitramine_to_nitrosamine": ["RDX", "HMX", "CL-20", "TEX"],
+        "aliphatic_nitro_to_nitroso": ["Octanitrocubane"],
+        "aliphatic_nitro_to_amino": ["Octanitrocubane"],
+    }
+    for reagent_id, names in expected.items():
+        assert reagent_id in REAGENTS_BY_ID
+        for name in names:
+            products = apply_reagent_random_sites(seeds[name], reagent_id, random.Random(0))
+            assert products, f"{reagent_id} produced no candidate for {name}"

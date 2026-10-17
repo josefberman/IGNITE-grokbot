@@ -4,7 +4,7 @@ The planner predicts a **family** (the broad class), then a **reagent** (one spe
 
 Families apply to the learned planner only. The rule-based modifier ignores families; its source of truth is the flat reagent list in [reagents.md](reagents.md).
 
-There are 11 families and 62 reagents. The sign column is the strategy-pool direction `(Δdensity, Δdetonation velocity, Δdetonation pressure, Δenthalpy of formation)`, each component in `{−1, 0, +1}`. It is a design label, not a measured delta.
+There are 11 families and 65 reagents. The sign column is the strategy-pool direction `(Δdensity, Δdetonation velocity, Δdetonation pressure, Δenthalpy of formation)`, each component in `{−1, 0, +1}`. It is a design label, not a measured delta.
 
 ## Nitration
 
@@ -110,6 +110,9 @@ Aromatic and aliphatic nitration share one direction. Nitramine and gem-dinitro 
 | `hydrogenate_CC` | Aliphatic C=C → C–C | 0, −1, +1, −1 |
 | `nitro_to_amino` | Ar–NO2 → Ar–NH2 | 0, −1, −1, +1 |
 | `azide_to_amino` | Ar–N3 → Ar–NH2 | −1, 0, +1, −1 |
+| `nitramine_to_nitrosamine` | Nitramine N–NO2 → nitrosamine N–NO | −1, −1, −1, +1 |
+| `aliphatic_nitro_to_nitroso` | Aliphatic/cage C–NO2 → C–NO | −1, −1, −1, +1 |
+| `aliphatic_nitro_to_amino` | Aliphatic/cage C–NO2 → C–NH2 | 0, −1, −1, +1 |
 
 ## Alkylation
 

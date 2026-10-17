@@ -4,7 +4,7 @@ The rule-based modifier works only at the reagent level. It is a flat list of re
 
 Effects were taken from the Direction column of [reaction_families.md](reaction_families.md); the reaction SMARTS live in `backend/app/services/reaction_primitives.py` under the same reagent id. The code list is `backend/app/services/reagents.py`; a unit test keeps this table, that list, and the primitive deltas in sync.
 
-62 reagents.
+65 reagents.
 
 | Reagent | Edit | density | det_velocity | det_pressure | hf_solid |
 | --- | --- | --- | --- | --- | --- |
@@ -70,3 +70,14 @@ Effects were taken from the Direction column of [reaction_families.md](reaction_
 | `ethyl_CH` | Aromatic C–H → C–CH2CH3 | lower | neutral | lower | neutral |
 | `hydroxymethyl_CH` | Aromatic C–H → C–CH2OH | neutral | lower | neutral | lower |
 | `aromatize_diene` | Cyclohexadiene → benzene | neutral | raise | neutral | lower |
+| `nitramine_to_nitrosamine` | Nitramine N–NO2 → nitrosamine N–NO | lower | lower | lower | raise |
+| `aliphatic_nitro_to_nitroso` | Aliphatic/cage C–NO2 → C–NO | lower | lower | lower | raise |
+| `aliphatic_nitro_to_amino` | Aliphatic/cage C–NO2 → C–NH2 | neutral | lower | lower | raise |
+
+## Cage and saturated-nitramine reagents
+
+These three reagents give the rule-based modifier reaction sites on saturated nitramines and fully substituted cages (RDX, HMX, CL-20, TEX, octanitrocubane), which otherwise match no aromatic/open-chain C–H or N–H pattern:
+
+- `nitramine_to_nitrosamine` — N–NO2 → N–NO on a ring nitramine nitrogen; nitramine ⇄ nitrosamine interconversion is the first step of nitramine thermal/photolytic decomposition (Zeman, Propellants Explos. Pyrotech. 32, 155 (2007)). Matches RDX, HMX, CL-20, TEX.
+- `aliphatic_nitro_to_nitroso` — aliphatic/cage C–NO2 → C–NO; the analogous C-nitro ⇄ C-nitroso reduction documented for strained polynitro cages. Matches octanitrocubane.
+- `aliphatic_nitro_to_amino` — aliphatic/cage C–NO2 → C–NH2 reduction, the standard nitro-to-amine reduction applied at an sp3 carbon. Matches octanitrocubane.
