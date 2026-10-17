@@ -1,0 +1,772 @@
+{
+  "description": "50 benchmark combos for best_path analysis; each is run in planner and rule_based modes.",
+  "rationale": {
+    "targets": "Sampled within the ~10th-90th percentile band of data/seeds/energetic_seed_library.csv (77 seeds): density 1.45-1.95 g/cm3 (seed median 1.76), det_velocity ~6500-9500 m/s (median 7806), det_pressure ~17.5-40.5 GPa (median 27.7), hf_solid -130..+100 kJ/mol (10th pct -132, 90th pct +90). Velocity and pressure scale with density (as in Kamlet-Jacobs) with small noise so targets are physically consistent rather than impossible combinations.",
+    "beam": "depth in {3,4,5,6,8}, width in {3,4,5,6,8}, top_k in {2,3,4,5} cycled with different periods so all values co-occur; depth <= 8 keeps per-run cost to seconds-to-minutes on a CPU (worst case 8x8x5 expansions). random_seed 1000-1049, unique per combo.",
+    "fixed": "early_stop_on_mape=false so every run attempts the full depth; literature lookup on, patent/online search off for reproducibility and no network.",
+    "generator": "random.Random(20261017)"
+  },
+  "fixed_beam": {
+    "mape_threshold": 1.0,
+    "enable_literature": true,
+    "enable_patent_search": false,
+    "novelty_as_gate": false,
+    "early_stop_on_mape": false
+  },
+  "modes": [
+    "planner",
+    "rule_based"
+  ],
+  "combos": [
+    {
+      "id": "combo_01",
+      "targets": {
+        "density": 1.59,
+        "det_velocity": 7430.0,
+        "det_pressure": 25.9,
+        "hf_solid": -18.6
+      },
+      "beam": {
+        "depth": 3,
+        "width": 3,
+        "top_k": 2,
+        "random_seed": 1000
+      }
+    },
+    {
+      "id": "combo_02",
+      "targets": {
+        "density": 1.847,
+        "det_velocity": 8970.0,
+        "det_pressure": 34.4,
+        "hf_solid": -2.3
+      },
+      "beam": {
+        "depth": 4,
+        "width": 3,
+        "top_k": 2,
+        "random_seed": 1001
+      }
+    },
+    {
+      "id": "combo_03",
+      "targets": {
+        "density": 1.727,
+        "det_velocity": 8030.0,
+        "det_pressure": 28.4,
+        "hf_solid": 82.8
+      },
+      "beam": {
+        "depth": 5,
+        "width": 3,
+        "top_k": 3,
+        "random_seed": 1002
+      }
+    },
+    {
+      "id": "combo_04",
+      "targets": {
+        "density": 1.706,
+        "det_velocity": 8060.0,
+        "det_pressure": 27.1,
+        "hf_solid": 33.1
+      },
+      "beam": {
+        "depth": 6,
+        "width": 3,
+        "top_k": 3,
+        "random_seed": 1003
+      }
+    },
+    {
+      "id": "combo_05",
+      "targets": {
+        "density": 1.532,
+        "det_velocity": 7080.0,
+        "det_pressure": 22.7,
+        "hf_solid": -0.1
+      },
+      "beam": {
+        "depth": 8,
+        "width": 3,
+        "top_k": 4,
+        "random_seed": 1004
+      }
+    },
+    {
+      "id": "combo_06",
+      "targets": {
+        "density": 1.805,
+        "det_velocity": 8210.0,
+        "det_pressure": 35.2,
+        "hf_solid": 53.7
+      },
+      "beam": {
+        "depth": 3,
+        "width": 4,
+        "top_k": 4,
+        "random_seed": 1005
+      }
+    },
+    {
+      "id": "combo_07",
+      "targets": {
+        "density": 1.728,
+        "det_velocity": 8300.0,
+        "det_pressure": 29.1,
+        "hf_solid": -13.0
+      },
+      "beam": {
+        "depth": 4,
+        "width": 4,
+        "top_k": 5,
+        "random_seed": 1006
+      }
+    },
+    {
+      "id": "combo_08",
+      "targets": {
+        "density": 1.698,
+        "det_velocity": 8270.0,
+        "det_pressure": 30.3,
+        "hf_solid": -74.7
+      },
+      "beam": {
+        "depth": 5,
+        "width": 4,
+        "top_k": 5,
+        "random_seed": 1007
+      }
+    },
+    {
+      "id": "combo_09",
+      "targets": {
+        "density": 1.611,
+        "det_velocity": 7510.0,
+        "det_pressure": 24.9,
+        "hf_solid": -60.5
+      },
+      "beam": {
+        "depth": 6,
+        "width": 4,
+        "top_k": 2,
+        "random_seed": 1008
+      }
+    },
+    {
+      "id": "combo_10",
+      "targets": {
+        "density": 1.485,
+        "det_velocity": 7130.0,
+        "det_pressure": 21.6,
+        "hf_solid": 63.5
+      },
+      "beam": {
+        "depth": 8,
+        "width": 4,
+        "top_k": 2,
+        "random_seed": 1009
+      }
+    },
+    {
+      "id": "combo_11",
+      "targets": {
+        "density": 1.811,
+        "det_velocity": 8790.0,
+        "det_pressure": 32.6,
+        "hf_solid": -43.1
+      },
+      "beam": {
+        "depth": 3,
+        "width": 5,
+        "top_k": 3,
+        "random_seed": 1010
+      }
+    },
+    {
+      "id": "combo_12",
+      "targets": {
+        "density": 1.594,
+        "det_velocity": 7370.0,
+        "det_pressure": 23.5,
+        "hf_solid": 84.2
+      },
+      "beam": {
+        "depth": 4,
+        "width": 5,
+        "top_k": 3,
+        "random_seed": 1011
+      }
+    },
+    {
+      "id": "combo_13",
+      "targets": {
+        "density": 1.664,
+        "det_velocity": 7930.0,
+        "det_pressure": 27.5,
+        "hf_solid": -94.8
+      },
+      "beam": {
+        "depth": 5,
+        "width": 5,
+        "top_k": 4,
+        "random_seed": 1012
+      }
+    },
+    {
+      "id": "combo_14",
+      "targets": {
+        "density": 1.659,
+        "det_velocity": 7680.0,
+        "det_pressure": 28.9,
+        "hf_solid": 78.7
+      },
+      "beam": {
+        "depth": 6,
+        "width": 5,
+        "top_k": 4,
+        "random_seed": 1013
+      }
+    },
+    {
+      "id": "combo_15",
+      "targets": {
+        "density": 1.941,
+        "det_velocity": 8930.0,
+        "det_pressure": 39.0,
+        "hf_solid": -41.7
+      },
+      "beam": {
+        "depth": 8,
+        "width": 5,
+        "top_k": 5,
+        "random_seed": 1014
+      }
+    },
+    {
+      "id": "combo_16",
+      "targets": {
+        "density": 1.621,
+        "det_velocity": 7710.0,
+        "det_pressure": 27.9,
+        "hf_solid": -116.7
+      },
+      "beam": {
+        "depth": 3,
+        "width": 6,
+        "top_k": 5,
+        "random_seed": 1015
+      }
+    },
+    {
+      "id": "combo_17",
+      "targets": {
+        "density": 1.76,
+        "det_velocity": 8540.0,
+        "det_pressure": 33.5,
+        "hf_solid": -119.0
+      },
+      "beam": {
+        "depth": 4,
+        "width": 6,
+        "top_k": 2,
+        "random_seed": 1016
+      }
+    },
+    {
+      "id": "combo_18",
+      "targets": {
+        "density": 1.486,
+        "det_velocity": 7000.0,
+        "det_pressure": 19.2,
+        "hf_solid": -89.1
+      },
+      "beam": {
+        "depth": 5,
+        "width": 6,
+        "top_k": 2,
+        "random_seed": 1017
+      }
+    },
+    {
+      "id": "combo_19",
+      "targets": {
+        "density": 1.794,
+        "det_velocity": 8460.0,
+        "det_pressure": 30.4,
+        "hf_solid": 43.7
+      },
+      "beam": {
+        "depth": 6,
+        "width": 6,
+        "top_k": 3,
+        "random_seed": 1018
+      }
+    },
+    {
+      "id": "combo_20",
+      "targets": {
+        "density": 1.884,
+        "det_velocity": 8760.0,
+        "det_pressure": 35.6,
+        "hf_solid": 75.8
+      },
+      "beam": {
+        "depth": 8,
+        "width": 6,
+        "top_k": 3,
+        "random_seed": 1019
+      }
+    },
+    {
+      "id": "combo_21",
+      "targets": {
+        "density": 1.89,
+        "det_velocity": 8990.0,
+        "det_pressure": 34.4,
+        "hf_solid": -127.7
+      },
+      "beam": {
+        "depth": 3,
+        "width": 8,
+        "top_k": 4,
+        "random_seed": 1020
+      }
+    },
+    {
+      "id": "combo_22",
+      "targets": {
+        "density": 1.896,
+        "det_velocity": 8950.0,
+        "det_pressure": 38.2,
+        "hf_solid": -24.2
+      },
+      "beam": {
+        "depth": 4,
+        "width": 8,
+        "top_k": 4,
+        "random_seed": 1021
+      }
+    },
+    {
+      "id": "combo_23",
+      "targets": {
+        "density": 1.566,
+        "det_velocity": 7270.0,
+        "det_pressure": 23.5,
+        "hf_solid": -38.9
+      },
+      "beam": {
+        "depth": 5,
+        "width": 8,
+        "top_k": 5,
+        "random_seed": 1022
+      }
+    },
+    {
+      "id": "combo_24",
+      "targets": {
+        "density": 1.67,
+        "det_velocity": 7840.0,
+        "det_pressure": 27.5,
+        "hf_solid": 6.3
+      },
+      "beam": {
+        "depth": 6,
+        "width": 8,
+        "top_k": 5,
+        "random_seed": 1023
+      }
+    },
+    {
+      "id": "combo_25",
+      "targets": {
+        "density": 1.782,
+        "det_velocity": 8100.0,
+        "det_pressure": 31.9,
+        "hf_solid": -78.3
+      },
+      "beam": {
+        "depth": 8,
+        "width": 8,
+        "top_k": 2,
+        "random_seed": 1024
+      }
+    },
+    {
+      "id": "combo_26",
+      "targets": {
+        "density": 1.521,
+        "det_velocity": 7170.0,
+        "det_pressure": 22.3,
+        "hf_solid": 46.0
+      },
+      "beam": {
+        "depth": 3,
+        "width": 3,
+        "top_k": 2,
+        "random_seed": 1025
+      }
+    },
+    {
+      "id": "combo_27",
+      "targets": {
+        "density": 1.46,
+        "det_velocity": 6900.0,
+        "det_pressure": 18.1,
+        "hf_solid": 43.3
+      },
+      "beam": {
+        "depth": 4,
+        "width": 3,
+        "top_k": 3,
+        "random_seed": 1026
+      }
+    },
+    {
+      "id": "combo_28",
+      "targets": {
+        "density": 1.754,
+        "det_velocity": 8390.0,
+        "det_pressure": 28.6,
+        "hf_solid": 40.4
+      },
+      "beam": {
+        "depth": 5,
+        "width": 3,
+        "top_k": 3,
+        "random_seed": 1027
+      }
+    },
+    {
+      "id": "combo_29",
+      "targets": {
+        "density": 1.651,
+        "det_velocity": 7480.0,
+        "det_pressure": 25.4,
+        "hf_solid": -42.2
+      },
+      "beam": {
+        "depth": 6,
+        "width": 3,
+        "top_k": 4,
+        "random_seed": 1028
+      }
+    },
+    {
+      "id": "combo_30",
+      "targets": {
+        "density": 1.722,
+        "det_velocity": 8090.0,
+        "det_pressure": 28.5,
+        "hf_solid": -84.8
+      },
+      "beam": {
+        "depth": 8,
+        "width": 3,
+        "top_k": 4,
+        "random_seed": 1029
+      }
+    },
+    {
+      "id": "combo_31",
+      "targets": {
+        "density": 1.711,
+        "det_velocity": 8210.0,
+        "det_pressure": 28.7,
+        "hf_solid": -10.2
+      },
+      "beam": {
+        "depth": 3,
+        "width": 4,
+        "top_k": 5,
+        "random_seed": 1030
+      }
+    },
+    {
+      "id": "combo_32",
+      "targets": {
+        "density": 1.66,
+        "det_velocity": 7850.0,
+        "det_pressure": 26.9,
+        "hf_solid": -18.6
+      },
+      "beam": {
+        "depth": 4,
+        "width": 4,
+        "top_k": 5,
+        "random_seed": 1031
+      }
+    },
+    {
+      "id": "combo_33",
+      "targets": {
+        "density": 1.881,
+        "det_velocity": 9150.0,
+        "det_pressure": 36.0,
+        "hf_solid": -13.4
+      },
+      "beam": {
+        "depth": 5,
+        "width": 4,
+        "top_k": 2,
+        "random_seed": 1032
+      }
+    },
+    {
+      "id": "combo_34",
+      "targets": {
+        "density": 1.713,
+        "det_velocity": 8030.0,
+        "det_pressure": 27.0,
+        "hf_solid": -11.9
+      },
+      "beam": {
+        "depth": 6,
+        "width": 4,
+        "top_k": 2,
+        "random_seed": 1033
+      }
+    },
+    {
+      "id": "combo_35",
+      "targets": {
+        "density": 1.771,
+        "det_velocity": 8050.0,
+        "det_pressure": 32.9,
+        "hf_solid": -16.3
+      },
+      "beam": {
+        "depth": 8,
+        "width": 4,
+        "top_k": 3,
+        "random_seed": 1034
+      }
+    },
+    {
+      "id": "combo_36",
+      "targets": {
+        "density": 1.594,
+        "det_velocity": 7630.0,
+        "det_pressure": 26.7,
+        "hf_solid": -9.2
+      },
+      "beam": {
+        "depth": 3,
+        "width": 5,
+        "top_k": 3,
+        "random_seed": 1035
+      }
+    },
+    {
+      "id": "combo_37",
+      "targets": {
+        "density": 1.735,
+        "det_velocity": 8300.0,
+        "det_pressure": 29.6,
+        "hf_solid": 77.9
+      },
+      "beam": {
+        "depth": 4,
+        "width": 5,
+        "top_k": 4,
+        "random_seed": 1036
+      }
+    },
+    {
+      "id": "combo_38",
+      "targets": {
+        "density": 1.908,
+        "det_velocity": 9230.0,
+        "det_pressure": 34.9,
+        "hf_solid": -12.5
+      },
+      "beam": {
+        "depth": 5,
+        "width": 5,
+        "top_k": 4,
+        "random_seed": 1037
+      }
+    },
+    {
+      "id": "combo_39",
+      "targets": {
+        "density": 1.51,
+        "det_velocity": 7260.0,
+        "det_pressure": 21.8,
+        "hf_solid": -86.6
+      },
+      "beam": {
+        "depth": 6,
+        "width": 5,
+        "top_k": 5,
+        "random_seed": 1038
+      }
+    },
+    {
+      "id": "combo_40",
+      "targets": {
+        "density": 1.581,
+        "det_velocity": 7410.0,
+        "det_pressure": 25.1,
+        "hf_solid": 5.0
+      },
+      "beam": {
+        "depth": 8,
+        "width": 5,
+        "top_k": 5,
+        "random_seed": 1039
+      }
+    },
+    {
+      "id": "combo_41",
+      "targets": {
+        "density": 1.683,
+        "det_velocity": 8030.0,
+        "det_pressure": 30.7,
+        "hf_solid": -39.7
+      },
+      "beam": {
+        "depth": 3,
+        "width": 6,
+        "top_k": 2,
+        "random_seed": 1040
+      }
+    },
+    {
+      "id": "combo_42",
+      "targets": {
+        "density": 1.649,
+        "det_velocity": 7740.0,
+        "det_pressure": 28.8,
+        "hf_solid": -29.8
+      },
+      "beam": {
+        "depth": 4,
+        "width": 6,
+        "top_k": 2,
+        "random_seed": 1041
+      }
+    },
+    {
+      "id": "combo_43",
+      "targets": {
+        "density": 1.662,
+        "det_velocity": 7590.0,
+        "det_pressure": 26.8,
+        "hf_solid": 8.3
+      },
+      "beam": {
+        "depth": 5,
+        "width": 6,
+        "top_k": 3,
+        "random_seed": 1042
+      }
+    },
+    {
+      "id": "combo_44",
+      "targets": {
+        "density": 1.724,
+        "det_velocity": 8090.0,
+        "det_pressure": 32.0,
+        "hf_solid": -0.6
+      },
+      "beam": {
+        "depth": 6,
+        "width": 6,
+        "top_k": 3,
+        "random_seed": 1043
+      }
+    },
+    {
+      "id": "combo_45",
+      "targets": {
+        "density": 1.844,
+        "det_velocity": 8890.0,
+        "det_pressure": 33.7,
+        "hf_solid": 24.2
+      },
+      "beam": {
+        "depth": 8,
+        "width": 6,
+        "top_k": 4,
+        "random_seed": 1044
+      }
+    },
+    {
+      "id": "combo_46",
+      "targets": {
+        "density": 1.827,
+        "det_velocity": 8490.0,
+        "det_pressure": 35.5,
+        "hf_solid": -36.7
+      },
+      "beam": {
+        "depth": 3,
+        "width": 8,
+        "top_k": 4,
+        "random_seed": 1045
+      }
+    },
+    {
+      "id": "combo_47",
+      "targets": {
+        "density": 1.658,
+        "det_velocity": 7940.0,
+        "det_pressure": 26.2,
+        "hf_solid": -44.0
+      },
+      "beam": {
+        "depth": 4,
+        "width": 8,
+        "top_k": 5,
+        "random_seed": 1046
+      }
+    },
+    {
+      "id": "combo_48",
+      "targets": {
+        "density": 1.72,
+        "det_velocity": 8050.0,
+        "det_pressure": 31.8,
+        "hf_solid": 70.1
+      },
+      "beam": {
+        "depth": 5,
+        "width": 8,
+        "top_k": 5,
+        "random_seed": 1047
+      }
+    },
+    {
+      "id": "combo_49",
+      "targets": {
+        "density": 1.677,
+        "det_velocity": 8130.0,
+        "det_pressure": 27.6,
+        "hf_solid": -23.7
+      },
+      "beam": {
+        "depth": 6,
+        "width": 8,
+        "top_k": 2,
+        "random_seed": 1048
+      }
+    },
+    {
+      "id": "combo_50",
+      "targets": {
+        "density": 1.565,
+        "det_velocity": 7430.0,
+        "det_pressure": 24.1,
+        "hf_solid": -25.2
+      },
+      "beam": {
+        "depth": 8,
+        "width": 8,
+        "top_k": 2,
+        "random_seed": 1049
+      }
+    }
+  ]
+}
