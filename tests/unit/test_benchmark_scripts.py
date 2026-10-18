@@ -103,3 +103,50 @@ def test_lower_score_is_better_in_beam_ranking():
     mk = lambda t: SimpleNamespace(score=SimpleNamespace(total=t), generation=1, id=str(t))
     kept = BeamSearchController._select_survivors([mk(0.9), mk(0.1), mk(0.5)], 1, explore=False)
     assert kept[0].score.total == 0.1
+
+
+gen = _load("generate_benchmark_config")
+
+
+def test_config_500_valid_unique_in_range():
+    from backend.app.domain.models import BeamParameters, TargetProperties
+
+    cfg = rb.load_config(ROOT / "configs" / "benchmark_runs_500.json")
+    combos = cfg["combos"]
+    assert len(combos) == 500
+    assert len({c["id"] for c in combos}) == 500
+    assert len({c["beam"]["random_seed"] for c in combos}) == 500
+    assert set(cfg["modes"]) == {"planner", "rule_based"}
+    assert cfg["fixed_beam"]["early_stop_on_mape"] is False
+    assert cfg["fixed_beam"]["enable_patent_search"] is False
+    for c in combos:
+        t, b = c["targets"], c["beam"]
+        assert 1.45 <= t["density"] <= 1.95
+        assert 6500 <= t["det_velocity"] <= 9500
+        assert 17.5 <= t["det_pressure"] <= 40.5
+        assert -130 <= t["hf_solid"] <= 100
+        assert 3 <= b["depth"] <= 8 and 3 <= b["width"] <= 8 and 2 <= b["top_k"] <= 5
+        TargetProperties(**t)
+        BeamParameters(**{**cfg["fixed_beam"], **b})
+    d = np.array([c["targets"]["density"] for c in combos])
+    assert np.corrcoef(d, [c["targets"]["det_velocity"] for c in combos])[0, 1] > 0.8
+    assert np.corrcoef(d, [c["targets"]["det_pressure"] for c in combos])[0, 1] > 0.8
+
+
+def test_generator_deterministic_and_matches_committed():
+    assert gen.generate(500) == gen.generate(500)
+    assert gen.generate(500) == json.loads((ROOT / "configs" / "benchmark_runs_500.json").read_text())
+    assert gen.generate(20, rng_seed=1) != gen.generate(20, rng_seed=2)
+
+
+@pytest.mark.parametrize("args,expected", [([], 100), (["--suite", "50"], 100), (["--suite", "500"], 1000)])
+def test_suite_flag_selects_config(tmp_path, capsys, args, expected):
+    assert rb.main([*args, "--dry-run", "--log-dir", str(tmp_path)]) == 0
+    assert f"pending={expected} " in capsys.readouterr().out
+
+
+def test_config_flag_overrides_suite(tmp_path, capsys):
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(gen.generate(3)))
+    assert rb.main(["--suite", "500", "--config", str(p), "--dry-run", "--log-dir", str(tmp_path / "l")]) == 0
+    assert "pending=6 " in capsys.readouterr().out
