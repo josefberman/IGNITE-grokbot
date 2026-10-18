@@ -348,6 +348,17 @@ IGNITE_RUN_LOG_DIR=logs/benchmark .venv/bin/python scripts/run_benchmark.py
 .venv/bin/python scripts/analyze_best_path.py --log-dir logs/benchmark --out-dir docs/figures
 ```
 
+**500-combo suite (1000 runs).** `configs/benchmark_runs_500.json` is produced by `scripts/generate_benchmark_config.py` (fixed `random.Random(20261018)`, same ranges and schema, ids `combo_001`–`combo_500`, seeds 2000–2499). Select it with `--suite 500` (or any file with `--config PATH`; the default stays the 50-combo suite). Use a separate log dir:
+
+```bash
+git pull
+uv pip install -p .venv/bin/python -e ".[dev,sascore,torch,benchmark]"
+.venv/bin/python scripts/generate_benchmark_config.py   # optional: regenerates the identical file
+.venv/bin/python scripts/run_benchmark.py --suite 500 --log-dir logs/benchmark_500 --dry-run
+.venv/bin/python scripts/run_benchmark.py --suite 500 --log-dir logs/benchmark_500   # resumable
+.venv/bin/python scripts/analyze_best_path.py --log-dir logs/benchmark_500 --out-dir docs/figures/benchmark_500
+```
+
 Outputs:
 
 - Each pair writes `logs/benchmark/<combo_id>__<mode>.json`. These are normal run logs with a `best_path`, plus a `benchmark` block that holds the combo id, the clamped beam, and the elapsed time. `logs/` is gitignored.

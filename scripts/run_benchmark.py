@@ -22,6 +22,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 MODES = ("planner", "rule_based")
 
+SUITES = {
+    "50": ROOT / "configs" / "benchmark_runs.json",
+    "500": ROOT / "configs" / "benchmark_runs_500.json",
+}
+
 
 def log_path(log_dir: Path, combo_id: str, mode: str) -> Path:
     return log_dir / f"{combo_id}__{mode}.json"
@@ -74,7 +79,8 @@ def run_one(combo: dict, mode: str, fixed: dict, depth_override=None) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--config", type=Path, default=ROOT / "configs" / "benchmark_runs.json")
+    ap.add_argument("--config", type=Path, default=None, help="Config path (overrides --suite)")
+    ap.add_argument("--suite", choices=sorted(SUITES), default="50", help="Built-in config: 50 (default) or 500")
     ap.add_argument("--log-dir", type=Path, default=None)
     ap.add_argument("--modes", nargs="+", choices=MODES, default=list(MODES))
     ap.add_argument("--limit", type=int, default=None, help="Only the first N combos (smoke test)")
@@ -84,7 +90,9 @@ def main(argv=None) -> int:
 
     log_dir = args.log_dir or Path(os.environ.get("IGNITE_RUN_LOG_DIR") or ROOT / "logs" / "benchmark")
     log_dir.mkdir(parents=True, exist_ok=True)
-    cfg = load_config(args.config)
+    config_path = args.config or SUITES[args.suite]
+    cfg = load_config(config_path)
+    print(f"config={config_path}", flush=True)
     todo, skipped = plan(cfg, log_dir, args.modes, args.limit)
     print(f"log_dir={log_dir} pending={len(todo)} skipped_valid={len(skipped)}", flush=True)
     if args.dry_run:
