@@ -32,6 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0,<9", "pytest-asyncio>=0.23.0,<2"]
+benchmark = ["matplotlib>=3.7,<4"]
 torch = ["torch>=2.1.0,<3"]
 ml = ["ignite[torch]", "torch-geometric>=2.4.0,<3"]
 literature = [

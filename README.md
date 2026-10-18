@@ -325,3 +325,36 @@ Code and project documentation are licensed under the [Apache License 2.0](LICEN
 This repository is **research software in progress**. Public release supports open science and reproducibility; it is not a substitute for peer-reviewed journal publication of associated manuscripts. Most chemistry / ML venues accept prior public code and preprints — confirm the target journal’s preprint / prior-disclosure policy before submission.
 
 Data and trained artifacts: seed CSV and XGBoost models are project assets (see [docs/LICENSING.md](docs/LICENSING.md)). Synthetic modification pairs are weak labels derived from SMARTS + model predictions — mark measured experimental labels separately when ingested.
+## Benchmark: best-path score, planner vs rule-based
+
+`configs/benchmark_runs.json` holds 50 target/beam combos. Targets fall inside the 10th–90th percentile range of the seed library, and velocity and pressure scale with density. Depth is 3–8, width 3–8, top-k 2–5, and each combo has its own random seed. The file explains how the combos were chosen. `scripts/run_benchmark.py` runs every combo in both `planner` and `rule_based` mode, so 100 runs in total. `scripts/analyze_best_path.py` plots the mean best-path `overall.score` against generation, one line per mode with a ±1 SD band.
+
+Copy-paste from a fresh clone (Linux/macOS; on Windows use `.venv\Scripts\python`):
+
+```bash
+git clone https://github.com/josefberman/IGNITE-grokbot.git && cd IGNITE-grokbot
+uv venv -p 3.11 .venv
+uv pip install -p .venv/bin/python torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install -p .venv/bin/python -e ".[dev,sascore,torch,benchmark]"
+# (without uv: python3.11 -m venv .venv && .venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu && .venv/bin/pip install -e ".[dev,sascore,torch,benchmark]")
+
+# optional smoke test: 1 combo, depth 2, both modes, separate log dir
+.venv/bin/python scripts/run_benchmark.py --limit 1 --depth-override 2 --log-dir logs/benchmark_smoke
+
+# full benchmark (100 runs); re-run the same command to resume after an interruption
+IGNITE_RUN_LOG_DIR=logs/benchmark .venv/bin/python scripts/run_benchmark.py
+
+# plot
+.venv/bin/python scripts/analyze_best_path.py --log-dir logs/benchmark --out-dir docs/figures
+```
+
+Outputs:
+
+- Each pair writes `logs/benchmark/<combo_id>__<mode>.json`. These are normal run logs with a `best_path`, plus a `benchmark` block that holds the combo id, the clamped beam, and the elapsed time. `logs/` is gitignored.
+- The runner skips a pair if its log already exists, parses, and has a non-empty `best_path`. Each failure is appended to `logs/benchmark/failures.jsonl` with the error and traceback, and the runner moves on to the next pair. It exits with code 1 if any pair failed. Use `--dry-run` to list pending pairs and `--modes rule_based` to run one mode only.
+- `docs/figures/best_path_score_vs_generation.{pdf,svg,png}` (the PNG is 300 dpi) and `best_path_score_vs_generation.csv`, which has the mean, SD, and n for each mode and generation.
+- PubChem/OpenAlex and patent lookups are off, so runs need no network. Literature values come from the local seed library only.
+
+**Lower is better.** `overall.score` is `ScoreBreakdown.total`: MAPE plus the SAScore penalty plus the minimal-edit penalty. Beam search keeps the lowest totals.
+
+**Variable-length policy (carry-forward).** Best paths differ in length. At generation g, a run's value is the score of the last best-path step with generation ≤ g. After the path ends, its final score carries forward up to the highest generation seen in that mode, because the best molecule no longer changes. Mean and SD (ddof=0) are taken over all runs of a mode at each generation.
