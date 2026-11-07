@@ -81,7 +81,7 @@ class TargetProperties(BaseModel):
 
 
 class BeamParameters(BaseModel):
-    depth: int = Field(10, ge=1, le=50, description="Beam depth")
+    depth: int = Field(10, ge=1, le=100, description="Beam depth")
     width: int = Field(5, ge=1, le=100, description="Expansions per node")
     top_k: int = Field(5, ge=1, le=50, description="Survivors per iteration K")
     mape_threshold: float = Field(1.0, ge=0.0, le=100.0)

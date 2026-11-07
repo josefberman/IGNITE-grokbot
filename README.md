@@ -153,8 +153,8 @@ python -m ml.training.train_planner --epochs 30 --patience 7
 | `--lr`               | `0.0002`                                | AdamW learning rate                                                                  |
 | `--jitter-prob`      | `0.0`                                   | Probability of jittering the training property gap. `0` matches inference            |
 | `--accum-steps`      | `16`                                    | Examples accumulated before one optimizer step                                       |
-| `--hidden`           | `64`                                    | Encoder and head width                                                               |
-| `--layers`           | `3`                                     | Residual bond message-passing layers in `GraphEncoder`                               |
+| `--hidden`           | `128`                                   | Encoder and head width                                                               |
+| `--layers`           | `1`                                     | Residual bond message-passing layers in `GraphEncoder`                               |
 | `--heads`            | `4`                                     | Kept for checkpoint metadata. The current encoder does not use attention heads       |
 | `--dropout`          | `0.15`                                  | Dropout                                                                              |
 | `--label-smoothing`  | `0.0`                                   | Recorded in the model card. Not applied to the loss while applicability masks are on |
@@ -217,7 +217,7 @@ Open [http://localhost:5173](http://localhost:5173). You do not type a SMILES. T
 
 | Field          | GUI default | Meaning                                                                          | API limit                                              |
 | -------------- | ----------- | -------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Depth          | 10          | Expansion rounds                                                                 | 1–50, clamped by `IGNITE_MAX_BEAM_DEPTH` (default 20)  |
+| Depth          | 10          | Expansion rounds                                                                 | 1–100, clamped by `IGNITE_MAX_BEAM_DEPTH` (default 100) |
 | Width          | 5           | Children generated from each parent                                              | 1–100, clamped by `IGNITE_MAX_BEAM_WIDTH` (default 50) |
 | Top K          | 3           | Molecules kept after each round                                                  | 1–50, clamped by `IGNITE_MAX_TOP_K` (default 25)       |
 | MAPE threshold | 1%          | Target mean absolute percentage error across the four properties (equal weights) | 0–100                                                  |
@@ -258,7 +258,7 @@ Optional `.env` variables, prefix `IGNITE_`:
 | `IGNITE_SEED_CSV`               | `data/seeds/energetic_seed_library.csv`       | Seed library for search                 |
 | `IGNITE_DATABASE_URL`           | SQLite at `data/ignite.db`                    | Job store                               |
 | `IGNITE_CORS_ORIGINS`           | `http://localhost:5173,http://localhost:3000` | Allowed browser origins                 |
-| `IGNITE_MAX_BEAM_DEPTH`         | `20`                                          | Clamp on GUI depth                      |
+| `IGNITE_MAX_BEAM_DEPTH`         | `100`                                         | Clamp on GUI depth                      |
 | `IGNITE_MAX_BEAM_WIDTH`         | `50`                                          | Clamp on GUI width                      |
 | `IGNITE_MAX_TOP_K`              | `25`                                          | Clamp on GUI top K                      |
 | `IGNITE_LEARNED_CHECKPOINT_DIR` | `ml/checkpoints`                              | Where `planner.pt` is loaded from       |

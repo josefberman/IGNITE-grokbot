@@ -57,7 +57,14 @@ def plan(cfg: dict, log_dir: Path, modes=MODES, limit=None):
     return todo, skipped
 
 
-def run_one(combo: dict, mode: str, fixed: dict, depth_override=None) -> dict:
+def run_one(
+    combo: dict,
+    mode: str,
+    fixed: dict,
+    depth_override=None,
+    width_override=None,
+    top_k_override=None,
+) -> dict:
     os.environ.setdefault("IGNITE_PUBCHEM_ENABLED", "false")
     os.environ.setdefault("IGNITE_OPENALEX_ENABLED", "false")
     from backend.app.domain.models import BeamParameters, ModificationMode, TargetProperties
@@ -66,6 +73,10 @@ def run_one(combo: dict, mode: str, fixed: dict, depth_override=None) -> dict:
     beam_kw = {**fixed, **combo["beam"]}
     if depth_override:
         beam_kw["depth"] = depth_override
+    if width_override:
+        beam_kw["width"] = width_override
+    if top_k_override:
+        beam_kw["top_k"] = top_k_override
     beam = _clamp_beam(BeamParameters(**beam_kw))
     controller = _build_controller(beam)
     targets = TargetProperties(**combo["targets"])
@@ -84,7 +95,9 @@ def main(argv=None) -> int:
     ap.add_argument("--log-dir", type=Path, default=None)
     ap.add_argument("--modes", nargs="+", choices=MODES, default=list(MODES))
     ap.add_argument("--limit", type=int, default=None, help="Only the first N combos (smoke test)")
-    ap.add_argument("--depth-override", type=int, default=None, help="Force depth (smoke test)")
+    ap.add_argument("--depth-override", type=int, default=None, help="Force depth for every combo")
+    ap.add_argument("--width-override", type=int, default=None, help="Force width for every combo")
+    ap.add_argument("--top-k-override", type=int, default=None, help="Force top_k for every combo")
     ap.add_argument("--dry-run", action="store_true", help="List pending pairs and exit")
     args = ap.parse_args(argv)
 
@@ -104,7 +117,10 @@ def main(argv=None) -> int:
     for i, (combo, mode) in enumerate(todo, 1):
         t0 = time.time()
         try:
-            rec = run_one(combo, mode, cfg.get("fixed_beam", {}), args.depth_override)
+            rec = run_one(
+                combo, mode, cfg.get("fixed_beam", {}),
+                args.depth_override, args.width_override, args.top_k_override,
+            )
             rec["benchmark"]["elapsed_s"] = round(time.time() - t0, 2)
             out = log_path(log_dir, combo["id"], mode)
             tmp = out.with_suffix(".json.tmp")

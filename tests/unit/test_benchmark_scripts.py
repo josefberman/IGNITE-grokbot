@@ -24,7 +24,15 @@ ab = _load("analyze_best_path")
 def _log(path, mode, scores):
     path.write_text(json.dumps({
         "mode": mode,
-        "best_path": [{"step": i, "generation": i, "overall": {"score": s}} for i, s in enumerate(scores)],
+        "best_path": [
+            {
+                "step": i,
+                "generation": i,
+                "overall": {"score": s},
+                "fit": {"mape_normalized": s / 10},
+            }
+            for i, s in enumerate(scores)
+        ],
     }))
 
 
@@ -84,8 +92,9 @@ def test_analysis_writes_figures(tmp_path):
     (logs / "junk.json").write_text("not json")
     out = tmp_path / "fig"
     assert ab.main(["--log-dir", str(logs), "--out-dir", str(out)]) == 0
-    for ext in ("pdf", "svg", "png", "csv"):
-        assert (out / f"best_path_score_vs_generation.{ext}").stat().st_size > 0
+    for stem in ("best_path_score_vs_generation", "best_path_mape_normalized_vs_generation"):
+        for ext in ("pdf", "svg", "png", "csv"):
+            assert (out / f"{stem}.{ext}").stat().st_size > 0
     from PIL import Image
 
     dpi = Image.open(out / "best_path_score_vs_generation.png").info.get("dpi")

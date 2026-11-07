@@ -124,6 +124,8 @@ class LearnedPlannerBundle:
                     DEFAULT_HEADS,
                     DEFAULT_HIDDEN,
                     DEFAULT_LAYERS,
+                    DEFAULT_REAGENT_LAYERS,
+                    DEFAULT_SITE_LAYERS,
                     ModificationPlanner,
                 )
 
@@ -135,9 +137,18 @@ class LearnedPlannerBundle:
                 layers = int(meta.get("layers", DEFAULT_LAYERS))
                 heads = int(meta.get("heads", DEFAULT_HEADS))
                 dropout = float(meta.get("dropout", DEFAULT_DROPOUT))
+                # Checkpoints written before head depth was saved use a linear family head.
+                family_layers = int(meta["family_layers"]) if "family_layers" in meta else 0
+                reagent_layers = int(meta.get("reagent_layers", DEFAULT_REAGENT_LAYERS))
+                site_layers = int(meta.get("site_layers", DEFAULT_SITE_LAYERS))
                 enc_kw = dict(hidden=hidden, layers=layers, heads=heads, dropout=dropout)
                 model = ModificationPlanner(
-                    n_families=len(families), n_reagents=len(reagents), **enc_kw
+                    n_families=len(families),
+                    n_reagents=len(reagents),
+                    family_layers=family_layers,
+                    reagent_layers=reagent_layers,
+                    site_layers=site_layers,
+                    **enc_kw,
                 )
                 model.load_state_dict(blob["planner"])
                 model.eval()

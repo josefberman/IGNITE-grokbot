@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite+aiosqlite:///{ROOT / 'data' / 'ignite.db'}"
     redis_url: str = ""
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
-    max_beam_depth: int = 20
+    max_beam_depth: int = 100
     max_beam_width: int = 50
     max_top_k: int = 25
     openai_api_key: str = ""

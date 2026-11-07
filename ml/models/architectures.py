@@ -90,10 +90,39 @@ def mol_to_graph(smiles: str) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
     return x, edge_index
 
 
-DEFAULT_HIDDEN = 64
-DEFAULT_LAYERS = 3
+DEFAULT_HIDDEN = 128
+DEFAULT_LAYERS = 1
 DEFAULT_HEADS = 4  # retained for CLI / checkpoint meta compatibility; unused by GraphEncoder
 DEFAULT_DROPOUT = 0.15
+# Hidden layers before the logits. 0 is a single linear map.
+DEFAULT_FAMILY_LAYERS = 1
+DEFAULT_REAGENT_LAYERS = 1
+DEFAULT_SITE_LAYERS = 1
+
+
+def _mlp_head(in_dim: int, hidden: int, out_dim: int, n_hidden: int, dropout: float) -> nn.Module:
+    """``n_hidden`` hidden layers, then a linear map to ``out_dim``. ``0`` is one linear layer."""
+    if n_hidden <= 0:
+        return nn.Linear(in_dim, out_dim)
+    mods: List[nn.Module] = []
+    width = in_dim
+    for _ in range(n_hidden):
+        mods.extend((nn.Linear(width, hidden), nn.GELU(), nn.Dropout(dropout)))
+        width = hidden
+    mods.append(nn.Linear(width, out_dim))
+    return nn.Sequential(*mods)
+
+
+def _site_mix(in_dim: int, hidden: int, n_hidden: int) -> nn.Module:
+    """Hidden stack for the site head. At least one layer; no dropout, matching the shipped head."""
+    if n_hidden < 1:
+        raise ValueError("site head needs at least one hidden layer")
+    mods: List[nn.Module] = []
+    width = in_dim
+    for _ in range(n_hidden):
+        mods.extend((nn.Linear(width, hidden), nn.GELU()))
+        width = hidden
+    return nn.Sequential(*mods)
 
 
 class BondMessagePass(nn.Module):
@@ -192,12 +221,18 @@ class ModificationPlanner(nn.Module):
         heads: int = DEFAULT_HEADS,
         dropout: float = DEFAULT_DROPOUT,
         gap_dim: int = 4,
+        family_layers: int = DEFAULT_FAMILY_LAYERS,
+        reagent_layers: int = DEFAULT_REAGENT_LAYERS,
+        site_layers: int = DEFAULT_SITE_LAYERS,
     ):
         super().__init__()
         self.hidden = hidden
         self.n_families = n_families
         self.n_reagents = n_reagents
         self.gap_dim = gap_dim
+        self.family_layers = family_layers
+        self.reagent_layers = reagent_layers
+        self.site_layers = site_layers
         enc_kw = dict(hidden=hidden, layers=layers, heads=heads, dropout=dropout)
         self.parent_enc = GraphEncoder(**enc_kw)
         self.film = nn.Linear(gap_dim, hidden * 2)
@@ -208,17 +243,15 @@ class ModificationPlanner(nn.Module):
             nn.GELU(),
             nn.Dropout(dropout),
         )
-        self.family_head = nn.Linear(hidden + gap_dim, n_families)
-        self.reagent_head = nn.Sequential(
-            nn.Linear(hidden + n_families + gap_dim + hidden * 2, hidden),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden, n_reagents),
+        self.family_head = _mlp_head(hidden + gap_dim, hidden, n_families, family_layers, dropout)
+        self.reagent_head = _mlp_head(
+            hidden + n_families + gap_dim + hidden * 2,
+            hidden,
+            n_reagents,
+            reagent_layers,
+            dropout,
         )
-        self.site_mix = nn.Sequential(
-            nn.Linear(hidden * 2 + hidden + gap_dim, hidden),
-            nn.GELU(),
-        )
+        self.site_mix = _site_mix(hidden * 2 + hidden + gap_dim, hidden, site_layers)
         self.site_head = nn.Linear(hidden, 1)
 
     def encode(

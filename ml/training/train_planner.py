@@ -22,9 +22,12 @@ from backend.app.services.reaction_primitives import (
 )
 from ml.models.architectures import (
     DEFAULT_DROPOUT,
+    DEFAULT_FAMILY_LAYERS,
     DEFAULT_HEADS,
     DEFAULT_HIDDEN,
     DEFAULT_LAYERS,
+    DEFAULT_REAGENT_LAYERS,
+    DEFAULT_SITE_LAYERS,
     ModificationPlanner,
     mol_to_graph,
 )
@@ -234,6 +237,9 @@ def train(
     grad_clip: float = 1.0,
     loss_reag_weight: float = 1.0,
     loss_site_weight: float = 1.0,
+    family_layers: int = DEFAULT_FAMILY_LAYERS,
+    reagent_layers: int = DEFAULT_REAGENT_LAYERS,
+    site_layers: int = DEFAULT_SITE_LAYERS,
 ):
     out_dir.mkdir(parents=True, exist_ok=True)
     rng = random.Random(seed)
@@ -286,7 +292,12 @@ def train(
 
     enc_kw = dict(hidden=hidden, layers=layers, heads=heads, dropout=dropout)
     planner = ModificationPlanner(
-        n_families=len(families), n_reagents=len(reagents), **enc_kw
+        n_families=len(families),
+        n_reagents=len(reagents),
+        family_layers=family_layers,
+        reagent_layers=reagent_layers,
+        site_layers=site_layers,
+        **enc_kw,
     )
     opt = torch.optim.AdamW(planner.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(1, epochs), eta_min=lr * 0.05)
@@ -512,6 +523,9 @@ def train(
         "layers": layers,
         "heads": heads,
         "dropout": dropout,
+        "family_layers": family_layers,
+        "reagent_layers": reagent_layers,
+        "site_layers": site_layers,
         "encoder": "residual_mp_mean_max",
         "gap_fuse": "film",
         "site_head": "local_context",
@@ -577,6 +591,9 @@ if __name__ == "__main__":
     ap.add_argument("--layers", type=int, default=DEFAULT_LAYERS)
     ap.add_argument("--heads", type=int, default=DEFAULT_HEADS)
     ap.add_argument("--dropout", type=float, default=DEFAULT_DROPOUT)
+    ap.add_argument("--family-layers", type=int, default=DEFAULT_FAMILY_LAYERS)
+    ap.add_argument("--reagent-layers", type=int, default=DEFAULT_REAGENT_LAYERS)
+    ap.add_argument("--site-layers", type=int, default=DEFAULT_SITE_LAYERS)
     ap.add_argument("--label-smoothing", type=float, default=0.0)
     ap.add_argument("--loss-reag-weight", type=float, default=1.0)
     ap.add_argument("--loss-site-weight", type=float, default=1.0)
@@ -598,4 +615,7 @@ if __name__ == "__main__":
         label_smoothing=args.label_smoothing,
         loss_reag_weight=args.loss_reag_weight,
         loss_site_weight=args.loss_site_weight,
+        family_layers=args.family_layers,
+        reagent_layers=args.reagent_layers,
+        site_layers=args.site_layers,
     )
