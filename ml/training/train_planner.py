@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from backend.app.services.reaction_primitives import (
     list_planner_vocab,
+    list_primitives,
     matching_group_ids,
     matching_reaction_ids,
     planner_labels,
@@ -28,10 +29,13 @@ from ml.models.architectures import (
     DEFAULT_LAYERS,
     DEFAULT_REAGENT_LAYERS,
     DEFAULT_SITE_LAYERS,
+    DEFAULT_BOND_TYPES,
+    DEFAULT_SITE_REAGENT,
     ModificationPlanner,
     mol_to_graph,
 )
 from ml.planner_gap import training_planner_input
+from ml.site_candidates import candidate_logits, positive_mask, reaction_sites
 
 
 def _parse_sites(raw) -> list[int]:
@@ -65,9 +69,28 @@ class PairDataset(Dataset):
         self.reagent_to_idx = reagent_to_idx
         self.rng = rng or random.Random(42)
         self.jitter_prob = jitter_prob
+        self._smarts = {
+            p["family_id"]: list(p.get("smarts_variants") or [])
+            for p in list_primitives()
+            if p["family_id"] != "identity"
+        }
+        self._sites: dict = {}
+        self._rxn_cache: dict = {}
 
     def __len__(self):
         return len(self.df)
+
+    def site_candidates(self, parent_smiles: str, reagent_id: str | None) -> list:
+        key = (parent_smiles, reagent_id)
+        if key not in self._sites:
+            from rdkit import Chem
+
+            mol = Chem.MolFromSmiles(parent_smiles)
+            smarts = self._smarts.get(reagent_id or "", [])
+            self._sites[key] = (
+                reaction_sites(mol, parent_smiles, smarts, self._rxn_cache) if mol is not None else []
+            )
+        return self._sites[key]
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
@@ -106,6 +129,8 @@ class PairDataset(Dataset):
         for a in sites:
             if 0 <= a < site_target.numel():
                 site_target[a] = 1.0
+        cands = self.site_candidates(str(row["parent_smiles"]), None if raw_reag is None else str(raw_reag))
+        site_pos = positive_mask(cands, str(row["child_smiles"]), sites)
         return (
             px,
             p_edge,
@@ -117,6 +142,8 @@ class PairDataset(Dataset):
             torch.tensor(planner_gap, dtype=torch.float32),
             site_target,
             str(row["parent_smiles"]),
+            cands,
+            site_pos,
         )
 
 
@@ -135,6 +162,26 @@ def _site_loss(site_logits: torch.Tensor, site_target: torch.Tensor) -> torch.Te
         return 0.01 * (site_logits ** 2).mean()
     log_prob = F.log_softmax(site_logits, dim=-1)
     return -(log_prob * site_target).sum() / site_target.sum().clamp_min(1.0)
+
+
+def _candidate_site_loss(site_logits: torch.Tensor, cands: list, site_pos: list[bool]) -> torch.Tensor | None:
+    """Softmax over the reagent's applicable sites; every equivalent site counts as correct.
+
+    Returns ``None`` when no candidate is labeled, so the caller can fall back to
+    the all-atom loss.
+    """
+    if not cands or not any(site_pos):
+        return None
+    scores = candidate_logits(site_logits, cands)
+    pos = torch.tensor(site_pos, dtype=torch.bool)
+    return torch.logsumexp(scores, dim=0) - torch.logsumexp(scores[pos], dim=0)
+
+
+def _candidate_site_hit(site_logits: torch.Tensor, cands: list, site_pos: list[bool]) -> bool | None:
+    """Top-scoring applicable site gives the labeled product. ``None`` if unlabeled."""
+    if not cands or not any(site_pos):
+        return None
+    return bool(site_pos[int(candidate_logits(site_logits, cands).argmax().item())])
 
 
 def _family_class_weights(labels: pd.Series, families: list[str]) -> torch.Tensor:
@@ -183,8 +230,13 @@ def _eval_inference_metrics(
     families: list[str],
     family_to_reagent_idxs: dict[str, list[int]],
     allowed_family_idxs: list[int] | None = None,
+    site_hit: bool | None = None,
 ) -> dict[str, bool]:
-    """Mirror LearnedPlannerBundle: predict family → family-conditioned reagent → site."""
+    """Mirror LearnedPlannerBundle: predict family → family-conditioned reagent → site.
+
+    ``site_hit`` is the candidate-site result when the pair has candidates; the
+    all-atom argmax is used otherwise.
+    """
     fam_for_pred = _mask_class_logits(fam_logits, allowed_family_idxs or [])
     pred_fam = int(fam_for_pred.argmax().item())
     pred_fam_t = torch.tensor([pred_fam])
@@ -202,7 +254,11 @@ def _eval_inference_metrics(
     reag_ok = pred_reag == true_reag
     reag_oracle_ok = oracle_reag == true_reag
     site_ok = False
-    if site_target.sum() > 0:
+    site_labeled = bool(site_target.sum() > 0)
+    if site_hit is not None:
+        site_ok = site_hit
+        site_labeled = True
+    elif site_labeled:
         site_ok = bool(site_target[int(site_logits.argmax().item())].item() > 0.5)
 
     return {
@@ -210,7 +266,7 @@ def _eval_inference_metrics(
         "reag": reag_ok,
         "reag_oracle": reag_oracle_ok,
         "site": site_ok,
-        "site_labeled": site_target.sum() > 0,
+        "site_labeled": site_labeled,
         "plan": fam_ok and reag_ok,
         "plan_all": fam_ok and reag_ok and site_ok,
         "fam_top3": true_fam in top3,
@@ -240,7 +296,14 @@ def train(
     family_layers: int = DEFAULT_FAMILY_LAYERS,
     reagent_layers: int = DEFAULT_REAGENT_LAYERS,
     site_layers: int = DEFAULT_SITE_LAYERS,
+    bond_types: int = DEFAULT_BOND_TYPES,
+    site_reagent: bool = DEFAULT_SITE_REAGENT,
 ):
+    from rdkit import RDLogger
+
+    # Site enumeration rejects many SMARTS products (for example pentavalent
+    # carbon); RDKit would otherwise print each one.
+    RDLogger.DisableLog("rdApp.*")
     out_dir.mkdir(parents=True, exist_ok=True)
     rng = random.Random(seed)
     torch.manual_seed(seed)
@@ -297,6 +360,8 @@ def train(
         family_layers=family_layers,
         reagent_layers=reagent_layers,
         site_layers=site_layers,
+        bond_types=bond_types,
+        site_reagent=site_reagent,
         **enc_kw,
     )
     opt = torch.optim.AdamW(planner.parameters(), lr=lr, weight_decay=weight_decay)
@@ -337,10 +402,14 @@ def train(
         micro = 0
         print(f"epoch {epoch+1}/{epochs} train ({n_train} pairs)", flush=True)
         for batch in train_loader:
-            for px, p_edge, _cx, _c_edge, fam, reag, _delta, planner_gap, site_target, parent_smi in batch:
+            for (
+                px, p_edge, _cx, _c_edge, fam, reag, _delta, planner_gap, site_target, parent_smi,
+                site_cands, site_pos,
+            ) in batch:
                 px_b = px.unsqueeze(0)
                 gap_b = planner_gap.unsqueeze(0)
                 fam_t = torch.tensor([fam])
+                reag_t = torch.tensor([reag])
                 z, _, atom_emb = planner.encode(px_b, gap_b, p_edge)
                 fam_logits = _mask_class_logits(
                     planner.forward_family(z, gap_b),
@@ -350,12 +419,14 @@ def train(
                     planner.forward_reagent(z, family_idx=fam_t, gap=gap_b, atom_emb=atom_emb),
                     _allowed_reagents(parent_smi, fam, reag),
                 )
-                site_logits = planner.forward_sites(atom_emb, z, gap_b)
+                site_logits = planner.forward_sites(atom_emb, z, gap_b, reagent_idx=reag_t)
                 # Applicability masks use -1e9; label smoothing would assign
                 # mass to those classes and blow up the loss.
                 loss_fam = F.cross_entropy(fam_logits, fam_t, weight=fam_weights)
-                loss_reag = F.cross_entropy(reag_logits, torch.tensor([reag]))
-                loss_site = _site_loss(site_logits, site_target)
+                loss_reag = F.cross_entropy(reag_logits, reag_t)
+                loss_site = _candidate_site_loss(site_logits, site_cands, site_pos)
+                if loss_site is None:
+                    loss_site = _site_loss(site_logits, site_target)
                 loss = loss_fam + loss_reag_weight * loss_reag + loss_site_weight * loss_site
                 (loss / accum_steps).backward()
                 micro += 1
@@ -404,6 +475,8 @@ def train(
                     planner_gap,
                     site_target,
                     parent_smi,
+                    site_cands,
+                    site_pos,
                 ) in batch:
                     px_b = px.unsqueeze(0)
                     gap_b = planner_gap.unsqueeze(0)
@@ -412,7 +485,12 @@ def train(
                     z, _, atom_emb = planner.encode(px_b, gap_b, p_edge)
                     fam_logits = planner.forward_family(z, gap_b)
                     fam_logits_m = _mask_class_logits(fam_logits, allowed_fam)
-                    site_logits = planner.forward_sites(atom_emb, z, gap_b)
+                    site_logits = planner.forward_sites(
+                        atom_emb, z, gap_b, reagent_idx=torch.tensor([reag])
+                    )
+                    site_loss = _candidate_site_loss(site_logits, site_cands, site_pos)
+                    if site_loss is None:
+                        site_loss = _site_loss(site_logits, site_target)
 
                     def reag_logits_fn(family_idx: torch.Tensor) -> torch.Tensor:
                         idx = int(family_idx.item())
@@ -431,7 +509,7 @@ def train(
                     loss = (
                         F.cross_entropy(fam_logits_m, fam_t, weight=fam_weights)
                         + loss_reag_weight * F.cross_entropy(oracle_reag, torch.tensor([reag]))
-                        + loss_site_weight * _site_loss(site_logits, site_target)
+                        + loss_site_weight * site_loss
                     )
                     val_loss += float(loss.item())
                     vn += 1
@@ -448,6 +526,7 @@ def train(
                         families=families,
                         family_to_reagent_idxs=family_to_reagent_idxs,
                         allowed_family_idxs=allowed_fam,
+                        site_hit=_candidate_site_hit(site_logits, site_cands, site_pos),
                     )
                     totals["fam"] += 1
                     totals["fam_top3"] += 1
@@ -519,16 +598,10 @@ def train(
         }
 
     arch_meta = {
-        "hidden": hidden,
-        "layers": layers,
-        "heads": heads,
-        "dropout": dropout,
-        "family_layers": family_layers,
-        "reagent_layers": reagent_layers,
-        "site_layers": site_layers,
+        **planner.arch_meta(),
         "encoder": "residual_mp_mean_max",
         "gap_fuse": "film",
-        "site_head": "local_context",
+        "site_head": "reagent_candidates" if site_reagent else "local_context",
         "reagent_local": "family_only",
         "vocab": "broad_family_specific_reagent",
         "applicability_mask": True,
@@ -594,6 +667,14 @@ if __name__ == "__main__":
     ap.add_argument("--family-layers", type=int, default=DEFAULT_FAMILY_LAYERS)
     ap.add_argument("--reagent-layers", type=int, default=DEFAULT_REAGENT_LAYERS)
     ap.add_argument("--site-layers", type=int, default=DEFAULT_SITE_LAYERS)
+    ap.add_argument(
+        "--bond-types", type=int, default=DEFAULT_BOND_TYPES,
+        help="Bond-type embeddings in message passing; 0 uses untyped bonds",
+    )
+    ap.add_argument(
+        "--no-site-reagent", action="store_true",
+        help="Reagent-blind site head (the layout of older checkpoints)",
+    )
     ap.add_argument("--label-smoothing", type=float, default=0.0)
     ap.add_argument("--loss-reag-weight", type=float, default=1.0)
     ap.add_argument("--loss-site-weight", type=float, default=1.0)
@@ -618,4 +699,6 @@ if __name__ == "__main__":
         family_layers=args.family_layers,
         reagent_layers=args.reagent_layers,
         site_layers=args.site_layers,
+        bond_types=args.bond_types,
+        site_reagent=not args.no_site_reagent,
     )

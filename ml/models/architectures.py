@@ -72,7 +72,26 @@ def _atom_features(atom: Chem.Atom) -> List[float]:
     return feats
 
 
+BOND_TYPE_LIST = [
+    Chem.rdchem.BondType.SINGLE,
+    Chem.rdchem.BondType.DOUBLE,
+    Chem.rdchem.BondType.TRIPLE,
+    Chem.rdchem.BondType.AROMATIC,
+]
+# Listed bond types plus "other".
+N_BOND_TYPES = len(BOND_TYPE_LIST) + 1
+
+
+def _bond_type_index(bond: Chem.Bond) -> int:
+    bt = bond.GetBondType()
+    return BOND_TYPE_LIST.index(bt) if bt in BOND_TYPE_LIST else len(BOND_TYPE_LIST)
+
+
 def mol_to_graph(smiles: str) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
+    """Atom features and a ``[3, E]`` edge tensor: source, target, bond-type index.
+
+    Encoders without bond embeddings read only the first two rows.
+    """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return None
@@ -81,17 +100,20 @@ def mol_to_graph(smiles: str) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
     edges = []
     for bond in mol.GetBonds():
         i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        edges.append([i, j])
-        edges.append([j, i])
+        bt = _bond_type_index(bond)
+        edges.append([i, j, bt])
+        edges.append([j, i, bt])
     if not edges:
-        edge_index = torch.zeros((2, 0), dtype=torch.long)
+        edge_index = torch.zeros((3, 0), dtype=torch.long)
     else:
         edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
     return x, edge_index
 
 
 DEFAULT_HIDDEN = 128
-DEFAULT_LAYERS = 1
+DEFAULT_LAYERS = 3
+DEFAULT_BOND_TYPES = N_BOND_TYPES
+DEFAULT_SITE_REAGENT = True
 DEFAULT_HEADS = 4  # retained for CLI / checkpoint meta compatibility; unused by GraphEncoder
 DEFAULT_DROPOUT = 0.15
 # Hidden layers before the logits. 0 is a single linear map.
@@ -126,13 +148,18 @@ def _site_mix(in_dim: int, hidden: int, n_hidden: int) -> nn.Module:
 
 
 class BondMessagePass(nn.Module):
-    """One residual round of bond-neighbor mean aggregation."""
+    """One residual round of bond-neighbor mean aggregation.
 
-    def __init__(self, hidden: int):
+    With ``bond_types > 0`` each message adds an embedding of its bond type;
+    ``0`` keeps the untyped messages of older checkpoints.
+    """
+
+    def __init__(self, hidden: int, bond_types: int = 0):
         super().__init__()
         self.self_lin = nn.Linear(hidden, hidden)
         self.nei_lin = nn.Linear(hidden, hidden)
         self.norm = nn.LayerNorm(hidden)
+        self.bond_emb = nn.Embedding(bond_types, hidden) if bond_types > 0 else None
 
     def forward(self, h: torch.Tensor, edge_index: Optional[torch.Tensor]) -> torch.Tensor:
         # h: [B, N, H]. Residual keeps the atom's own identity for the site head.
@@ -145,7 +172,10 @@ class BondMessagePass(nn.Module):
         src, dst = edge_index[0], edge_index[1]
         agg = torch.zeros(N, H, device=h.device, dtype=h.dtype)
         deg = torch.zeros(N, 1, device=h.device, dtype=h.dtype)
-        agg.index_add_(0, dst, h0[src])
+        msg = h0[src]
+        if self.bond_emb is not None and edge_index.size(0) > 2:
+            msg = msg + self.bond_emb(edge_index[2])
+        agg.index_add_(0, dst, msg)
         deg.index_add_(0, dst, torch.ones(len(dst), 1, device=h.device, dtype=h.dtype))
         agg = agg / deg.clamp_min(1.0)
         mixed = self.self_lin(h0) + self.nei_lin(agg)
@@ -162,12 +192,15 @@ class GraphEncoder(nn.Module):
         layers: int = DEFAULT_LAYERS,
         heads: int = DEFAULT_HEADS,  # unused; kept for call-site compatibility
         dropout: float = DEFAULT_DROPOUT,
+        bond_types: int = DEFAULT_BOND_TYPES,
     ):
         super().__init__()
         _ = heads  # encoder no longer uses multi-head attention
         self.hidden = hidden
         self.input = nn.Sequential(nn.Linear(in_dim, hidden), nn.LayerNorm(hidden))
-        self.mp_layers = nn.ModuleList([BondMessagePass(hidden) for _ in range(max(1, layers))])
+        self.mp_layers = nn.ModuleList(
+            [BondMessagePass(hidden, bond_types) for _ in range(max(1, layers))]
+        )
         self.dropout = nn.Dropout(dropout)
         self.readout = nn.Linear(hidden * 2, hidden)
 
@@ -207,9 +240,10 @@ GraphTransformerEncoder = GraphEncoder
 class ModificationPlanner(nn.Module):
     """Hierarchical: family → site → reagent (family-conditioned).
 
-    Layout matches the shipped ``ml/checkpoints/planner.pt`` (IGNITE
-    ``4df03fe``): FiLM on the graph vector, atom attention + fuse, and heads
-    that also see the raw 4-d gap.
+    FiLM on the graph vector, atom attention + fuse, and heads that also see the
+    raw 4-d gap. ``bond_types=0``, ``site_reagent=False``, and
+    ``family_layers=0`` rebuild checkpoints written before typed bonds and the
+    reagent-conditioned site head.
     """
 
     def __init__(
@@ -224,16 +258,23 @@ class ModificationPlanner(nn.Module):
         family_layers: int = DEFAULT_FAMILY_LAYERS,
         reagent_layers: int = DEFAULT_REAGENT_LAYERS,
         site_layers: int = DEFAULT_SITE_LAYERS,
+        bond_types: int = DEFAULT_BOND_TYPES,
+        site_reagent: bool = DEFAULT_SITE_REAGENT,
     ):
         super().__init__()
         self.hidden = hidden
+        self.layers = layers
+        self.heads = heads
+        self.dropout = dropout
         self.n_families = n_families
         self.n_reagents = n_reagents
         self.gap_dim = gap_dim
         self.family_layers = family_layers
         self.reagent_layers = reagent_layers
         self.site_layers = site_layers
-        enc_kw = dict(hidden=hidden, layers=layers, heads=heads, dropout=dropout)
+        self.bond_types = bond_types
+        self.site_reagent = site_reagent
+        enc_kw = dict(hidden=hidden, layers=layers, heads=heads, dropout=dropout, bond_types=bond_types)
         self.parent_enc = GraphEncoder(**enc_kw)
         self.film = nn.Linear(gap_dim, hidden * 2)
         self.atom_score = nn.Linear(hidden + gap_dim, 1)
@@ -251,8 +292,28 @@ class ModificationPlanner(nn.Module):
             reagent_layers,
             dropout,
         )
-        self.site_mix = _site_mix(hidden * 2 + hidden + gap_dim, hidden, site_layers)
+        site_in = hidden * 2 + hidden + gap_dim
+        if site_reagent:
+            self.site_reagent_emb = nn.Embedding(n_reagents, hidden)
+            site_in += hidden
+        else:
+            self.site_reagent_emb = None
+        self.site_mix = _site_mix(site_in, hidden, site_layers)
         self.site_head = nn.Linear(hidden, 1)
+
+    def arch_meta(self) -> dict:
+        """Constructor settings a checkpoint needs to rebuild this model."""
+        return {
+            "hidden": self.hidden,
+            "layers": self.layers,
+            "heads": self.heads,
+            "dropout": self.dropout,
+            "family_layers": self.family_layers,
+            "reagent_layers": self.reagent_layers,
+            "site_layers": self.site_layers,
+            "bond_types": self.bond_types,
+            "site_reagent": self.site_reagent,
+        }
 
     def encode(
         self,
@@ -312,11 +373,20 @@ class ModificationPlanner(nn.Module):
         atom_emb: torch.Tensor,
         z: torch.Tensor,
         gap: Optional[torch.Tensor] = None,
+        reagent_idx: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """Per-atom site logits. ``reagent_idx`` is the reagent being placed; ignored by reagent-blind heads."""
         n_atoms = atom_emb.size(1)
         z_exp = z.unsqueeze(1).expand(-1, n_atoms, -1)
         gap_exp = self._gap(z, gap).unsqueeze(1).expand(-1, n_atoms, -1)
-        mixed = self.site_mix(torch.cat([atom_emb, z_exp, gap_exp], dim=-1))
+        parts = [atom_emb, z_exp, gap_exp]
+        if self.site_reagent_emb is not None:
+            if reagent_idx is None:
+                reag = torch.zeros(z.size(0), self.hidden, device=z.device, dtype=z.dtype)
+            else:
+                reag = self.site_reagent_emb(reagent_idx.to(device=z.device).view(-1))
+            parts.append(reag.unsqueeze(1).expand(-1, n_atoms, -1))
+        mixed = self.site_mix(torch.cat(parts, dim=-1))
         logits = self.site_head(mixed).squeeze(-1)
         if logits.dim() == 2 and logits.size(0) == 1:
             return logits.squeeze(0)

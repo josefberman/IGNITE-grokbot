@@ -137,10 +137,13 @@ class LearnedPlannerBundle:
                 layers = int(meta.get("layers", DEFAULT_LAYERS))
                 heads = int(meta.get("heads", DEFAULT_HEADS))
                 dropout = float(meta.get("dropout", DEFAULT_DROPOUT))
-                # Checkpoints written before head depth was saved use a linear family head.
+                # Checkpoints written before these keys were saved use a linear
+                # family head, untyped bonds, and a reagent-blind site head.
                 family_layers = int(meta["family_layers"]) if "family_layers" in meta else 0
                 reagent_layers = int(meta.get("reagent_layers", DEFAULT_REAGENT_LAYERS))
                 site_layers = int(meta.get("site_layers", DEFAULT_SITE_LAYERS))
+                bond_types = int(meta.get("bond_types", 0))
+                site_reagent = bool(meta.get("site_reagent", False))
                 enc_kw = dict(hidden=hidden, layers=layers, heads=heads, dropout=dropout)
                 model = ModificationPlanner(
                     n_families=len(families),
@@ -148,6 +151,8 @@ class LearnedPlannerBundle:
                     family_layers=family_layers,
                     reagent_layers=reagent_layers,
                     site_layers=site_layers,
+                    bond_types=bond_types,
+                    site_reagent=site_reagent,
                     **enc_kw,
                 )
                 model.load_state_dict(blob["planner"])
@@ -302,6 +307,57 @@ class LearnedPlannerBundle:
             scores = self._model.forward_sites(atom_emb, z, gap_t)
             m = max(1, min(top_m, scores.numel()))
             return torch.topk(scores, k=m).indices.tolist()
+
+    @property
+    def ranks_reagent_sites(self) -> bool:
+        """True when the site head is conditioned on the reagent it places."""
+        return bool(self._model is not None and getattr(self._model, "site_reagent", False))
+
+    def encode(self, parent_smiles: str, gap_vector: Sequence[float]):
+        """(z, atom_emb) for one parent and gap, or (None, None)."""
+        _, z, atom_emb, _ = self._encode(parent_smiles, gap_vector)
+        return z, atom_emb
+
+    def rank_reagent_sites(
+        self,
+        parent_smiles: str,
+        mol: Chem.Mol,
+        gap_vector: Sequence[float],
+        reagent_id: str,
+        *,
+        z=None,
+        atom_emb=None,
+    ) -> List[Tuple[str, str]]:
+        """(child_smiles, smarts) for each distinct product of one reagent, best site first.
+
+        A product's score is its best site's mean site-head logit; equivalent
+        sites give the same product and appear once.
+        """
+        from backend.app.services.reagents import reagent_smarts
+        from ml.site_candidates import candidate_logits, product_groups, reaction_sites
+
+        cands = reaction_sites(mol, parent_smiles, reagent_smarts(reagent_id))
+        if not cands:
+            return []
+        if z is None or atom_emb is None:
+            z, atom_emb = self.encode(parent_smiles, gap_vector)
+        if z is None or atom_emb is None or self._model is None:
+            return [(c.child, c.smarts) for c in cands]
+        import torch
+
+        reag_idx = None
+        if reagent_id in self.reagent_names:
+            reag_idx = torch.tensor([self.reagent_names.index(reagent_id)])
+        with torch.no_grad():
+            gap_t = torch.tensor([list(gap_vector)], dtype=torch.float32)
+            atom_logits = self._model.forward_sites(atom_emb, z, gap_t, reagent_idx=reag_idx)
+            scores = candidate_logits(atom_logits, cands).tolist()
+        ranked = []
+        for group in product_groups(cands):
+            best = max(group, key=lambda i: scores[i])
+            ranked.append((scores[best], cands[best]))
+        ranked.sort(key=lambda t: -t[0])
+        return [(c.child, c.smarts) for _, c in ranked]
 
     def plan(
         self,
@@ -509,12 +565,23 @@ class ModificationMechanism:
                 k_reagents=max(2, min(5, n + 1)),
                 top_m_sites=8,
             )
+            site_aware = self.learned.ranks_reagent_sites
+            z = atom_emb = None
+            if site_aware:
+                z, atom_emb = self.learned.encode(parent_smiles, gap_vec)
             raw_children: List[Tuple[str, str, str, str]] = []  # smi, family, reagent, smarts
             for group in families:
                 for reaction_id in reag_by_fam.get(group, []):
                     if reaction_id in tried:
                         continue
                     tried.add(reaction_id)
+                    if site_aware:
+                        ranked = self.learned.rank_reagent_sites(
+                            parent_smiles, mol, gap_vec, reaction_id, z=z, atom_emb=atom_emb
+                        )[:family_cap]
+                        for smi, smarts in ranked:
+                            raw_children.append((smi, group, reaction_id, smarts))
+                        continue
                     for smi, _variant, smarts in self._apply_family(
                         parent_smiles,
                         mol,

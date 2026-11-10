@@ -18,6 +18,7 @@ from backend.app.services.prediction import PropertyPredictor
 from backend.app.services.reaction_primitives import list_primitives
 from backend.app.services.safety import estimate_safety
 from backend.app.domain.models import PROPERTY_KEYS
+from ml.site_candidates import reacting_atom_indices
 
 
 def scaffold_of(smiles: str) -> str:
@@ -28,33 +29,6 @@ def scaffold_of(smiles: str) -> str:
         return MurckoScaffold.MurckoScaffoldSmiles(mol=mol)
     except Exception:
         return ""
-
-
-def reacting_atom_indices(mol: Chem.Mol, rxn, product_index: int) -> list[int]:
-    """Map RDKit reacting template atoms onto parent atom indices for one RunReactants hit."""
-    try:
-        tmpl = rxn.GetReactantTemplate(0)
-        if tmpl is None:
-            return []
-        matches = mol.GetSubstructMatches(tmpl)
-        if product_index >= len(matches):
-            return []
-        match = matches[product_index]
-        reacting = []
-        try:
-            reacting_sets = rxn.GetReactingAtoms()
-            if reacting_sets:
-                reacting = list(reacting_sets[0])
-        except Exception:
-            reacting = []
-        if reacting:
-            sites = sorted({int(match[j]) for j in reacting if j < len(match)})
-            if sites:
-                return sites
-        # Weak fallback: all atoms in the matched reactant pattern
-        return sorted({int(a) for a in match})
-    except Exception:
-        return []
 
 
 def generate(

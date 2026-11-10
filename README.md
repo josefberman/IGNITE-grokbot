@@ -154,12 +154,14 @@ python -m ml.training.train_planner --epochs 30 --patience 7
 | `--jitter-prob`      | `0.0`                                   | Probability of jittering the training property gap. `0` matches inference            |
 | `--accum-steps`      | `16`                                    | Examples accumulated before one optimizer step                                       |
 | `--hidden`           | `128`                                   | Encoder and head width                                                               |
-| `--layers`           | `1`                                     | Residual bond message-passing layers in `GraphEncoder`                               |
+| `--layers`           | `3`                                     | Residual bond message-passing layers in `GraphEncoder`                               |
+| `--bond-types`       | `5`                                     | Bond-type embeddings added to messages (single, double, triple, aromatic, other). `0` is untyped |
+| `--no-site-reagent`  | off                                     | Use a reagent-blind site head. By default the site head is conditioned on the reagent |
 | `--heads`            | `4`                                     | Kept for checkpoint metadata. The current encoder does not use attention heads       |
 | `--dropout`          | `0.15`                                  | Dropout                                                                              |
 | `--label-smoothing`  | `0.0`                                   | Recorded in the model card. Not applied to the loss while applicability masks are on |
 | `--loss-reag-weight` | `1.0`                                   | Weight of the reagent cross-entropy                                                  |
-| `--loss-site-weight` | `1.0`                                   | Weight of the site softmax cross-entropy                                             |
+| `--loss-site-weight` | `1.0`                                   | Weight of the site loss: a softmax over the reagent's applicable sites, where every site giving the labeled product counts as correct |
 
 
 Family cross-entropy and delta MSE stay at weight 1. The API loads `ml/checkpoints/planner.pt` automatically (`IGNITE_LEARNED_CHECKPOINT_DIR` overrides the directory).

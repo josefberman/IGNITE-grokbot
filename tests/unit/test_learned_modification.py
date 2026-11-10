@@ -22,7 +22,7 @@ def _write_dummy_checkpoint(path: Path) -> None:
     torch.save(
         {
             "planner": planner.state_dict(),
-            "meta": {"families": families, "reagents": reagents},
+            "meta": {"families": families, "reagents": reagents, **planner.arch_meta()},
         },
         path / "planner.pt",
     )

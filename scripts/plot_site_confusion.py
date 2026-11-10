@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 """Site confusion matrices on the evaluation split.
 
-Each labeled reagent has a list of applicable sites: the distinct parent atom
-sets that yield a valid product. Sites are numbered from 1 in atom-index order,
-so within one parent and reagent the same number is the same atoms.
+A site is a distinct product of the labeled reagent on the parent. Atom sets
+that give the same product (for example symmetric ring positions) are one site,
+so picking either counts as correct. Sites are numbered from 1 by their lowest
+atom index; the same number is the same product only within one parent and
+reagent.
 
-The row is the site stored on the pair. The planner column is the applicable
-site with the highest mean site-head score on its reacting atoms. The
+The row is the site whose product is the pair's child. The planner column is
+the site with the highest mean site-head score on its reacting atoms, with the
+head conditioned on the labeled reagent when the checkpoint supports it. The
 rule-based column is the first product in a seeded shuffle of that reagent's
 products. Both choices use the labeled reagent, so this is the site decision
 rather than the reagent decision.
@@ -69,66 +72,13 @@ def plot_confusion(true_idx, pred_idx, labels: list[str], out_dir: Path, stem: s
                 w.writerow([labels[i], labels[j], int(counts[i, j]), f"{fraction[i, j]:.6g}"])
 
 
-def _reaction(smarts: str, cache: dict):
-    if smarts in cache:
-        return cache[smarts]
-    from rdkit.Chem import AllChem
-
-    try:
-        rxn = AllChem.ReactionFromSmarts(smarts)
-    except Exception:
-        rxn = None
-    cache[smarts] = rxn
-    return rxn
-
-
-def applicable_sites(mol, smiles: str, smarts_list: list[str], rxn_cache: dict) -> list[tuple]:
-    """Valid products as (child_smiles, reacting_atoms, match_atoms), in encounter order."""
-    from rdkit import Chem
-
-    from ml.data_gen.generate_pairs import reacting_atom_indices
-
-    raw = []
-    for smarts in smarts_list:
-        rxn = _reaction(smarts, rxn_cache)
-        if rxn is None:
-            continue
-        try:
-            products = rxn.RunReactants((mol,))
-        except Exception:
-            continue
-        try:
-            tmpl = rxn.GetReactantTemplate(0)
-            matches = mol.GetSubstructMatches(tmpl) if tmpl is not None else ()
-        except Exception:
-            matches = ()
-        for pi, product_tuple in enumerate(products):
-            reacting = tuple(int(a) for a in reacting_atom_indices(mol, rxn, pi))
-            match = tuple(int(a) for a in matches[pi]) if pi < len(matches) else reacting
-            for product in product_tuple:
-                try:
-                    Chem.SanitizeMol(product)
-                    child = Chem.MolToSmiles(product, canonical=True)
-                except Exception:
-                    continue
-                if not child or "." in child or child == smiles:
-                    continue
-                raw.append((child, reacting, match))
-                break
-    return raw
-
-
-def rule_choice(raw: list[tuple]) -> tuple | None:
-    """First product after the seeded shuffle used by the rule-based modifier."""
-    seen: dict[str, tuple] = {}
-    for child, reacting, _match in raw:
-        if child not in seen and reacting:
-            seen[child] = reacting
-    if not seen:
+def rule_choice(cands) -> str | None:
+    """Product of the first site after the seeded shuffle used by the rule-based modifier."""
+    children = sorted({c.child for c in cands})
+    if not children:
         return None
-    items = sorted(seen.items())
-    random.Random(RULE_SEED).shuffle(items)
-    return items[0][1]
+    random.Random(RULE_SEED).shuffle(children)
+    return children[0]
 
 
 def encode_parent(model, atom_x, edge):
@@ -136,11 +86,10 @@ def encode_parent(model, atom_x, edge):
     import torch
 
     with torch.inference_mode():
-        parent_z, atom_ctx, atom_local = model.parent_enc(atom_x, edge, return_atom_emb=True)
-    return parent_z, atom_ctx, atom_local
+        return model.parent_enc(atom_x, edge, return_atom_emb=True)
 
 
-def site_scores(model, encoded, gap):
+def site_scores(model, encoded, gap, reagent_idx):
     """Match ModificationPlanner.encode, then the site head, for one cached parent."""
     import torch
 
@@ -155,27 +104,7 @@ def site_scores(model, encoded, gap):
         attended = torch.bmm(alpha.unsqueeze(1), atom_local).squeeze(1)
         z = model.fuse(torch.cat([parent_cond, attended, gap], dim=-1))
         atom_emb = torch.cat([atom_local, atom_ctx], dim=-1)
-        return model.forward_sites(atom_emb, z, gap)
-
-
-def planner_choice(raw: list[tuple], scores) -> tuple | None:
-    """Applicable atom set with the highest mean site-head score."""
-    values = [float(x) for x in scores]
-    best: tuple | None = None
-    best_key: tuple[float, int] | None = None
-    seen: set[tuple] = set()
-    for _child, reacting, _match in raw:
-        if not reacting or reacting in seen:
-            continue
-        seen.add(reacting)
-        picked = [values[atom] for atom in reacting if 0 <= atom < len(values)]
-        if not picked:
-            continue
-        key = (sum(picked) / len(picked), -min(reacting))
-        if best_key is None or key > best_key:
-            best_key = key
-            best = reacting
-    return best
+        return model.forward_sites(atom_emb, z, gap, reagent_idx=reagent_idx)
 
 
 def main(argv=None) -> int:
@@ -197,6 +126,7 @@ def main(argv=None) -> int:
     from backend.app.services.reaction_primitives import list_primitives
     from ml.models.architectures import mol_to_graph
     from ml.planner_gap import planner_input_from_parent_target
+    from ml.site_candidates import candidate_logits, positive_mask, product_groups, reaction_sites
 
     if not args.data.exists():
         print(f"missing {args.data}")
@@ -205,13 +135,14 @@ def main(argv=None) -> int:
     if not bundle.available or bundle._model is None:
         print(bundle.unavailable_reason)
         return 1
+    print(f"site head conditioned on reagent: {bundle.ranks_reagent_sites}")
 
     smarts_by_reagent = {
         p["family_id"]: list(p.get("smarts_variants") or [])
         for p in list_primitives()
         if p["family_id"] != "identity"
     }
-    usecols = ["split", "parent_smiles", "reagent_id", "site_atom_indices"]
+    usecols = ["split", "parent_smiles", "child_smiles", "reagent_id", "site_atom_indices"]
     usecols += [f"parent_{k}" for k in PROP_COLS] + [f"child_{k}" for k in PROP_COLS]
     df = pd.read_csv(args.data, usecols=usecols)
     df = df[df["split"] == args.split]
@@ -223,45 +154,43 @@ def main(argv=None) -> int:
 
     model = bundle._model
     rxn_cache: dict = {}
-    mol_cache: dict = {}
     site_cache: dict = {}
     encoded_cache: dict = {}
     rows: list[tuple[int, int, int]] = []
     n = len(df)
-    n_unlabeled = n_no_site = n_label_miss = 0
+    n_no_site = n_unmatched = 0
 
     for i, rec in enumerate(df.itertuples(index=False), start=1):
         try:
             label = tuple(int(a) for a in json.loads(rec.site_atom_indices))
         except (TypeError, json.JSONDecodeError):
             label = tuple()
-        if not label:
-            n_unlabeled += 1
-            continue
         smiles = str(rec.parent_smiles)
         reagent = str(rec.reagent_id)
         key = (smiles, reagent)
         packed = site_cache.get(key)
         if packed is None:
-            mol = mol_cache.get(smiles)
-            if smiles not in mol_cache:
-                mol = Chem.MolFromSmiles(smiles)
-                mol_cache[smiles] = mol
-            raw = []
+            mol = Chem.MolFromSmiles(smiles)
+            cands = []
             if mol is not None:
-                raw = applicable_sites(mol, smiles, smarts_by_reagent.get(reagent, []), rxn_cache)
-            classes = sorted({reacting for _child, reacting, _match in raw if reacting})
-            rule = rule_choice(raw)
-            rule_index = classes.index(rule) if rule in classes else None
-            packed = (raw, classes, rule_index)
+                cands = reaction_sites(mol, smiles, smarts_by_reagent.get(reagent, []), rxn_cache)
+            group_of = {}
+            for g, members in enumerate(product_groups(cands)):
+                for m in members:
+                    group_of[m] = g
+            child_group = {cands[m].child: g for m, g in group_of.items()}
+            rule = rule_choice(cands)
+            packed = (cands, group_of, child_group.get(rule) if rule else None)
             site_cache[key] = packed
-        raw, classes, rule_index = packed
-        if not classes or label not in classes or rule_index is None:
-            if not classes or rule_index is None:
-                n_no_site += 1
-            else:
-                n_label_miss += 1
+        cands, group_of, rule_group = packed
+        if not cands or rule_group is None:
+            n_no_site += 1
             continue
+        pos = positive_mask(cands, str(rec.child_smiles), label)
+        if not any(pos):
+            n_unmatched += 1
+            continue
+        true_group = min(group_of[m] for m, p in enumerate(pos) if p)
 
         if smiles not in encoded_cache:
             graph = mol_to_graph(smiles)
@@ -277,11 +206,12 @@ def main(argv=None) -> int:
         parent = {k: float(getattr(rec, f"parent_{k}")) for k in PROP_COLS}
         target = {k: float(getattr(rec, f"child_{k}")) for k in PROP_COLS}
         gap = torch.tensor([planner_input_from_parent_target(parent, target)], dtype=torch.float32)
-        chosen = planner_choice(raw, site_scores(model, encoded, gap))
-        if chosen not in classes:
-            n_no_site += 1
-            continue
-        rows.append((classes.index(label), classes.index(chosen), rule_index))
+        reag_idx = None
+        if reagent in bundle.reagent_names:
+            reag_idx = torch.tensor([bundle.reagent_names.index(reagent)])
+        atom_logits = site_scores(model, encoded, gap, reag_idx)
+        planner_group = group_of[int(candidate_logits(atom_logits, cands).argmax().item())]
+        rows.append((true_group, planner_group, rule_group))
         if i % 2000 == 0 or i == n:
             print(f"  {i}/{n} kept={len(rows)}", flush=True)
 
@@ -306,7 +236,7 @@ def main(argv=None) -> int:
     planner_hit = sum(t == p for t, p, _r in rows) / kept
     rule_hit = sum(t == r for t, _p, r in rows) / kept
     print(
-        f"n={kept} unlabeled={n_unlabeled} no_site={n_no_site} label_miss={n_label_miss} "
+        f"n={kept} no_site={n_no_site} unmatched_label={n_unmatched} "
         f"planner_site={planner_hit:.3f} rule_site={rule_hit:.3f}"
     )
     for name in ("site_confusion_planner", "site_confusion_rule_based"):

@@ -8,6 +8,8 @@ node_modules/
 frontend/dist/
 # Runtime job store (copied snapshot is not committed; GUI runs rewrite it).
 data/ignite.db
+# Regenerated pairs exceed GitHub's 100 MB file limit.
+data/processed/modification_pairs.csv
 output/
 *.sqlite
 .pytest_cache/
